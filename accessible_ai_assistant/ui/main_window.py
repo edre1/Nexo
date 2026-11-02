@@ -227,7 +227,7 @@ class MainWindow:
         recognition.current(0 if self.settings.speech_recognition == "whisper" else 1)
         recognition.pack(anchor="w", pady=(4, 12))
         ttk.Label(frame, text="Voz para leer respuestas").pack(anchor="w")
-        voice = ttk.Combobox(frame, state="readonly", values=("Piper local · español de México", "Voz de Windows"), width=32)
+        voice = ttk.Combobox(frame, state="readonly", values=("Piper · Claude high · español MX", "Voz de Windows"), width=34)
         voice.current(0 if self.settings.speech_output == "piper" else 1)
         voice.pack(anchor="w", pady=(4, 12))
         ttk.Label(frame, text="Descarga los modelos una vez con internet. Después el audio se procesa localmente.", wraplength=400).pack(anchor="w")

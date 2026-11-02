@@ -2,11 +2,11 @@
 
 ## Whisper y Piper locales
 
-La versión de pruebas utiliza por defecto **Whisper base multilingüe**, con CPU e INT8, para reconocer español, y **Piper es_MX-ald-medium** para leer las respuestas.
+La versión de pruebas utiliza por defecto **Whisper base multilingüe**, con CPU e INT8, para reconocer español, y **Piper es_MX-claude-high** para leer las respuestas.
 
 1. Abre `iniciar.bat` para instalar los componentes nuevos.
 2. Abre Configuración con Ctrl+, y pulsa **Descargar modelos locales**. La primera descarga necesita internet y puede tardar varios minutos. También puedes ejecutar `descargar_modelos.bat`.
-3. Selecciona **Whisper local (base)** y **Piper local · español de México**, y pulsa Guardar. La selección se conserva para próximas aperturas.
+3. Selecciona **Whisper local (base)** y **Piper · Claude high · español MX**, y pulsa Guardar. La selección se conserva para próximas aperturas.
 
 Los modelos se guardan en `%LOCALAPPDATA%\Nexo\models`, compartidos entre las copias de pruebas de esta computadora. Una vez descargados, la transcripción y la lectura no envían audio a servicios externos. Gemini o Luna siguen necesitando conexión para interpretar la petición; el bloqueo de envío sin internet sigue activo.
 

@@ -5,8 +5,8 @@ from urllib.request import urlopen
 
 MODELS = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Nexo" / "models"
 WHISPER = MODELS / "whisper-base"
-PIPER = MODELS / "es_MX-ald-medium.onnx"
-VOICE_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/"
+PIPER = MODELS / "es_MX-claude-high.onnx"
+VOICE_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/claude/high/"
 
 
 def download_models(progress=lambda _text: None):
@@ -14,9 +14,9 @@ def download_models(progress=lambda _text: None):
     progress("Descargando Whisper base. La primera descarga puede tardar varios minutos.")
     from faster_whisper.utils import download_model
     download_model("base", output_dir=str(WHISPER))
-    progress("Descargando la voz de Piper en español de México.")
+    progress("Descargando la voz Claude high de Piper en español de México.")
     for name in (PIPER.name, PIPER.name + ".json", "MODEL_CARD"):
-        target = MODELS / ("Piper-MODEL_CARD.txt" if name == "MODEL_CARD" else name)
+        target = MODELS / (PIPER.stem + ".MODEL_CARD.txt" if name == "MODEL_CARD" else name)
         if target.exists():
             continue
         temp = target.with_suffix(target.suffix + ".part")
