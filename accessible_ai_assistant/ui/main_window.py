@@ -15,6 +15,7 @@ from actions.action_registry import Level
 from assistant_service import AssistantService, Prepared
 from config.settings import Settings, save_listen_hotkey
 from utils.connectivity import internet_available
+from speech.local_models import download_models
 from speech.output import WindowsSpeechOutput
 from speech.recognizer import ProviderSpeechRecognizer, microphone_status
 from updates import check_latest, release_settings
@@ -43,6 +44,7 @@ class MainWindow:
         self.last_target = 0
         self.own_hwnd = win32gui.GetAncestor(root.winfo_id(), win32con.GA_ROOT)
         self._build()
+        self.speech.on_error = lambda text: self.events.put(("voice_warning", text))
         self.hotkeys = GlobalHotkeys(settings.hotkey_listen, settings.hotkey_cancel, self._hotkey_event)
         try:
             self.hotkeys.start()
@@ -220,17 +222,35 @@ class MainWindow:
         key = ttk.Combobox(frame, values=tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"), state="readonly", width=10)
         key.set(self.settings.hotkey_listen.split("+")[-1].upper())
         key.pack(anchor="w", pady=12)
+        ttk.Label(frame, text="Reconocimiento de voz").pack(anchor="w")
+        recognition = ttk.Combobox(frame, state="readonly", values=("Whisper local (base)", "API del proveedor"), width=32)
+        recognition.current(0 if self.settings.speech_recognition == "whisper" else 1)
+        recognition.pack(anchor="w", pady=(4, 12))
+        ttk.Label(frame, text="Voz para leer respuestas").pack(anchor="w")
+        voice = ttk.Combobox(frame, state="readonly", values=("Piper local · español de México", "Voz de Windows"), width=32)
+        voice.current(0 if self.settings.speech_output == "piper" else 1)
+        voice.pack(anchor="w", pady=(4, 12))
+        ttk.Label(frame, text="Descarga los modelos una vez con internet. Después el audio se procesa localmente.", wraplength=400).pack(anchor="w")
+        ttk.Button(frame, text="Descargar modelos locales", command=self._download_models).pack(anchor="w", pady=10)
         def save():
             value = f"Ctrl+Alt+{key.get()}"
+            selected_recognition = "whisper" if recognition.current() == 0 else "provider"
+            selected_voice = "piper" if voice.current() == 0 else "windows"
             old = self.settings.hotkey_listen
             if value.upper() == old.upper():
+                try:
+                    save_listen_hotkey(value, selected_recognition, selected_voice)
+                except Exception as exc:
+                    self._announce_error(self._friendly_error(exc))
+                    return
+                self._apply_audio_settings(selected_recognition, selected_voice)
                 dialog.destroy()
                 return
             self.hotkeys.close()
             candidate = GlobalHotkeys(value, self.settings.hotkey_cancel, self._hotkey_event)
             try:
                 candidate.start()
-                save_listen_hotkey(value)
+                save_listen_hotkey(value, selected_recognition, selected_voice)
             except Exception as exc:
                 candidate.close()
                 self.hotkeys = GlobalHotkeys(old, self.settings.hotkey_cancel, self._hotkey_event)
@@ -242,6 +262,7 @@ class MainWindow:
                 return
             self.hotkeys = candidate
             self.settings = replace(self.settings, hotkey_listen=value)
+            self._apply_audio_settings(selected_recognition, selected_voice)
             self.status.set(f"Atajo para hablar: {value}.")
             self.speech.speak(f"Atajo guardado: {value}.")
             dialog.destroy()
@@ -253,6 +274,26 @@ class MainWindow:
         self.root.wait_window(dialog)
         self.command_entry.focus_set()
         return "break"
+
+    def _apply_audio_settings(self, recognition, voice):
+        self.settings = replace(self.settings, speech_recognition=recognition, speech_output=voice)
+        self.recognizer.engine = recognition
+        self.speech.engine = voice
+        self.speech.speak("Configuración de voz guardada.")
+
+    def _download_models(self):
+        if getattr(self, "downloading_models", False):
+            return
+        self.downloading_models = True
+        self.status.set("Preparando descarga de modelos locales.")
+        self.speech.speak("Descargando los modelos locales. Puede tardar varios minutos.")
+        def work():
+            try:
+                download_models(lambda text: self.events.put(("status", text)))
+                self.events.put(("models_ready",))
+            except Exception:
+                self.events.put(("models_error",))
+        threading.Thread(target=work, daemon=True).start()
 
     def _target(self) -> int:
         active = win32gui.GetForegroundWindow()
@@ -407,6 +448,17 @@ class MainWindow:
                     self.status.set(event[1])
                 elif kind == "connection":
                     self._apply_connection(event[1])
+                elif kind == "voice_warning":
+                    self.status.set(event[1])
+                    self._append_message("error", event[1])
+                elif kind == "models_ready":
+                    self.downloading_models = False
+                    self.speech.engine = self.settings.speech_output
+                    self.status.set("Whisper y Piper listos para usar.")
+                    self.speech.speak("Whisper y Piper están listos para usar.")
+                elif kind == "models_error":
+                    self.downloading_models = False
+                    self._announce_error("No pude descargar los modelos. Revisa internet y el espacio disponible e inténtalo de nuevo.")
                 elif kind == "update":
                     if event[1] is None:
                         self.status.set(f"La versión {release_settings()['version']} está actualizada.")

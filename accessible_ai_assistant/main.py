@@ -9,7 +9,7 @@ from ai.gemini_provider import GeminiProvider
 from ai.openai_provider import OpenAIProvider
 from config.settings import load_settings
 from security.security_manager import SecurityManager
-from speech.output import WindowsSpeechOutput
+from speech.local_output import LocalSpeechOutput
 from speech.recognizer import ProviderSpeechRecognizer
 from ui.main_window import MainWindow
 from utils.logger import setup_logger
@@ -47,8 +47,9 @@ def main() -> int:
     controller = WindowsController(win32gui.GetAncestor(root.winfo_id(), win32con.GA_ROOT))
     executor = ActionExecutor(controller, accessibility, provider, settings.enable_screen_vision)
     service = AssistantService(provider, SecurityManager(settings.require_confirmation_for_sensitive_actions), executor, logger, settings.learning_mode)
-    speech = WindowsSpeechOutput()
+    speech = LocalSpeechOutput(settings.speech_output)
     recognizer = ProviderSpeechRecognizer(provider)
+    recognizer.engine = settings.speech_recognition
     MainWindow(root, settings, service, speech, recognizer, accessibility, logger, providers, selected)
     root.mainloop()
     return 0

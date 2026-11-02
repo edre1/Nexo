@@ -22,6 +22,8 @@ class Settings:
     microphone_max_seconds: int
     api_key: str
     openai_api_key: str
+    speech_recognition: str = "whisper"
+    speech_output: str = "piper"
 
 
 def load_settings() -> Settings:
@@ -46,16 +48,22 @@ def load_settings() -> Settings:
         microphone_max_seconds=max(3, min(30, int(data.get("microphone_max_seconds", 10)))),
         api_key=os.environ.get("GEMINI_API_KEY", "").strip(),
         openai_api_key=os.environ.get("OPENAI_API_KEY", "").strip(),
+        speech_recognition="provider" if data.get("speech_recognition") == "provider" else "whisper",
+        speech_output="windows" if data.get("speech_output") == "windows" else "piper",
     )
 
 
-def save_listen_hotkey(value: str) -> None:
+def save_listen_hotkey(value: str, recognition: str | None = None, voice: str | None = None) -> None:
     from windows.hotkeys import parse_hotkey
     parse_hotkey(value)
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
     path = DATA_ROOT / "preferences.json"
     data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     data["hotkey_listen"] = value
+    if recognition in {"whisper", "provider"}:
+        data["speech_recognition"] = recognition
+    if voice in {"piper", "windows"}:
+        data["speech_output"] = voice
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(data, indent=2), encoding="utf-8")
     temporary.replace(path)

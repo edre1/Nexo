@@ -19,6 +19,9 @@ class ProviderSpeechRecognizer(SpeechRecognizer):
     """Records locally; sends one short WAV to the selected provider."""
     def __init__(self, provider: AIProvider):
         self.provider = provider
+        self.engine = "whisper"
+        from speech.local_models import WhisperTranscriber
+        self.local = WhisperTranscriber()
 
     def listen(self, cancel: threading.Event, seconds: int, language: str) -> str:
         rate = 16000
@@ -55,7 +58,11 @@ class ProviderSpeechRecognizer(SpeechRecognizer):
             wav.setsampwidth(2)
             wav.setframerate(rate)
             wav.writeframes(b"".join(frames))
-        return self.provider.transcribe(output.getvalue(), language)
+        transcriber = self.local if self.engine == "whisper" else self.provider
+        text = transcriber.transcribe(output.getvalue(), language)
+        if cancel.is_set():
+            raise InterruptedError("Escucha cancelada.")
+        return text
 
 
 def microphone_status() -> str:
