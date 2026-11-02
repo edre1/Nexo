@@ -1,4 +1,4 @@
-"""Compare Whisper base locally with Nexo's original Gemini transcription."""
+"""Compare Whisper small locally with Nexo's original Gemini transcription."""
 import argparse
 from io import BytesIO
 import json
@@ -10,9 +10,8 @@ import time
 import wave
 
 LOCAL = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-NEXO_MODEL = LOCAL / "Nexo" / "models" / "whisper-base"
-MODEL_PATH = NEXO_MODEL if (NEXO_MODEL / "model.bin").exists() else LOCAL / "PruebaWhisperBase" / "modelo-base"
-PROMPT = "Nombres: Nexo, Bloc de notas, Chrome, Word, Visual Studio Code."
+NEXO_MODEL = LOCAL / "Nexo" / "models" / "whisper-small"
+MODEL_PATH = NEXO_MODEL if (NEXO_MODEL / "model.bin").exists() else LOCAL / "PruebaWhisperSmall" / "modelo-small"
 GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 
@@ -76,7 +75,7 @@ class Benchmark:
     def transcribe(self, audio):
         loading = self.load()
         start = time.perf_counter()
-        segments, info = self.model.transcribe(audio, language="es", beam_size=3, vad_filter=True, condition_on_previous_text=False, initial_prompt=PROMPT)
+        segments, info = self.model.transcribe(audio, language="es", beam_size=5, vad_filter=True, condition_on_previous_text=False)
         text = " ".join(s.text.strip() for s in segments).strip()
         elapsed = time.perf_counter() - start
         return {"texto": text or "[No se detectaron palabras]", "audio_segundos": round(info.duration, 3), "carga_modelo_segundos": round(loading, 3), "transcripcion_segundos": round(elapsed, 3), "total_segundos": round(loading + elapsed, 3)}
@@ -84,9 +83,9 @@ class Benchmark:
     def compare(self, audio, key="", include_gemini=True):
         report = {"comparacion": "Mismo audio WAV para ambos modelos; tiempos medidos por separado."}
         try:
-            report["Whisper base (local)"] = self.transcribe(BytesIO(audio))
+            report["Whisper small (local)"] = self.transcribe(BytesIO(audio))
         except Exception as exc:
-            report["Whisper base (local)"] = {"error": str(exc)}
+            report["Whisper small (local)"] = {"error": str(exc)}
         if include_gemini:
             try:
                 report["Gemini (original de Nexo)"] = gemini_transcribe(audio, key)
@@ -102,12 +101,12 @@ def run_gui():
     from tkinter import ttk, filedialog
 
     root = tk.Tk()
-    root.title("Comparación · Whisper base y Gemini")
+    root.title("Comparación · Whisper small y Gemini")
     root.geometry("800x780")
     root.minsize(560, 480)
     frame = ttk.Frame(root, padding=20)
     frame.pack(fill="both", expand=True)
-    ttk.Label(frame, text="Whisper base frente a Gemini", font=("Segoe UI", 18, "bold")).pack(anchor="w")
+    ttk.Label(frame, text="Whisper small frente a Gemini", font=("Segoe UI", 18, "bold")).pack(anchor="w")
     ttk.Label(frame, text="Whisper procesa localmente. Al comparar, la misma grabación también se envía a Gemini. Solo transcribe; no ejecuta órdenes.", wraplength=700).pack(anchor="w", pady=8)
     compare = tk.BooleanVar(value=True)
     compare_box = ttk.Checkbutton(frame, text=f"Comparar también con Gemini ({GEMINI_MODEL})", variable=compare)
@@ -215,9 +214,9 @@ def run_gui():
             return
         def work():
             from faster_whisper.utils import download_model
-            download_model("base", output_dir=str(MODEL_PATH))
+            download_model("small", output_dir=str(MODEL_PATH))
             return {"aviso": "Modelo descargado. Ya puedes transcribir sin internet."}
-        status.set("Descargando Whisper base. Puede tardar varios minutos.")
+        status.set("Descargando Whisper small. Puede tardar varios minutos.")
         start_work(work)
 
     def drain():

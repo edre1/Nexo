@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-set "WHISPER_ENV=%LOCALAPPDATA%\PruebaWhisperBase\entorno"
+set "WHISPER_ENV=%LOCALAPPDATA%\PruebaWhisperSmall\entorno"
 if exist "%LOCALAPPDATA%\Nexo\entorno-pruebas\Scripts\python.exe" (
   "%LOCALAPPDATA%\Nexo\entorno-pruebas\Scripts\python.exe" prueba_whisper.py
   if errorlevel 1 pause

@@ -13,7 +13,7 @@ class ComparisonTests(unittest.TestCase):
         with patch("prueba_whisper.gemini_transcribe", return_value={"texto": "Hola"}) as cloud:
             report = benchmark.compare(b"same-wav", "test-key", True)
         cloud.assert_called_once_with(b"same-wav", "test-key")
-        self.assertEqual(report["Whisper base (local)"]["texto"], "Hola")
+        self.assertEqual(report["Whisper small (local)"]["texto"], "Hola")
 
     def test_cloud_error_preserves_local_text_without_leaking_credentials(self):
         benchmark = Benchmark()
@@ -21,7 +21,7 @@ class ComparisonTests(unittest.TestCase):
         with patch("prueba_whisper.gemini_transcribe", side_effect=RuntimeError("secret-key")):
             report = benchmark.compare(b"audio", "secret-key", True)
         self.assertNotIn("secret-key", str(report))
-        self.assertEqual(report["Whisper base (local)"]["texto"], "Resultado local")
+        self.assertEqual(report["Whisper small (local)"]["texto"], "Resultado local")
 
     def test_local_only_does_not_call_cloud(self):
         benchmark = Benchmark()
