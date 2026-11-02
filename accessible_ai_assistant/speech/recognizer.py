@@ -11,7 +11,7 @@ from ai.base_provider import AIProvider
 
 class SpeechRecognizer(ABC):
     @abstractmethod
-    def listen(self, cancel: threading.Event, seconds: int, language: str) -> str:
+    def listen(self, cancel: threading.Event, seconds: int, language: str, on_ready=None) -> str:
         pass
 
 
@@ -19,11 +19,8 @@ class ProviderSpeechRecognizer(SpeechRecognizer):
     """Records locally; sends one short WAV to the selected provider."""
     def __init__(self, provider: AIProvider):
         self.provider = provider
-        self.engine = "whisper"
-        from speech.local_models import WhisperTranscriber
-        self.local = WhisperTranscriber()
 
-    def listen(self, cancel: threading.Event, seconds: int, language: str) -> str:
+    def listen(self, cancel: threading.Event, seconds: int, language: str, on_ready=None) -> str:
         rate = 16000
         block = 1600
         frames: list[bytes] = []
@@ -31,7 +28,13 @@ class ProviderSpeechRecognizer(SpeechRecognizer):
         quiet_blocks = 0
         try:
             with sd.RawInputStream(samplerate=rate, channels=1, dtype="int16", blocksize=block) as stream:
-                for _ in range(seconds * 10):
+                if on_ready:
+                    on_ready()
+                    # Discard the assistant's spoken cue before recording the user.
+                    pending = stream.read_available
+                    if pending:
+                        stream.read(pending)
+                for _ in range(max(1, min(60, seconds)) * 10):
                     if cancel.is_set():
                         raise InterruptedError("Escucha cancelada.")
                     data, _overflow = stream.read(block)
@@ -42,9 +45,9 @@ class ProviderSpeechRecognizer(SpeechRecognizer):
                     if level > 350:
                         heard_voice = True
                         quiet_blocks = 0
-                    elif heard_voice:
+                    else:
                         quiet_blocks += 1
-                        if quiet_blocks >= 13:
+                        if quiet_blocks >= 30:
                             break
         except sd.PortAudioError as exc:
             raise RuntimeError("No pude acceder al micrófono. Revisa el dispositivo de entrada.") from exc
@@ -58,8 +61,7 @@ class ProviderSpeechRecognizer(SpeechRecognizer):
             wav.setsampwidth(2)
             wav.setframerate(rate)
             wav.writeframes(b"".join(frames))
-        transcriber = self.local if self.engine == "whisper" else self.provider
-        text = transcriber.transcribe(output.getvalue(), language)
+        text = self.provider.transcribe(output.getvalue(), language)
         if cancel.is_set():
             raise InterruptedError("Escucha cancelada.")
         return text

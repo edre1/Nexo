@@ -22,7 +22,7 @@ class Settings:
     microphone_max_seconds: int
     api_key: str
     openai_api_key: str
-    speech_recognition: str = "whisper"
+    speech_recognition: str = "provider"
     speech_output: str = "piper"
 
 
@@ -45,10 +45,10 @@ def load_settings() -> Settings:
         enable_screen_vision=bool(data.get("enable_screen_vision", True)),
         learning_mode=bool(data.get("learning_mode", True)),
         language=str(data.get("language", "es-MX")),
-        microphone_max_seconds=max(3, min(30, int(data.get("microphone_max_seconds", 10)))),
+        microphone_max_seconds=60,
         api_key=os.environ.get("GEMINI_API_KEY", "").strip(),
         openai_api_key=os.environ.get("OPENAI_API_KEY", "").strip(),
-        speech_recognition="provider" if data.get("speech_recognition") == "provider" else "whisper",
+        speech_recognition="provider",
         speech_output="windows" if data.get("speech_output") == "windows" else "piper",
     )
 
@@ -60,8 +60,7 @@ def save_listen_hotkey(value: str, recognition: str | None = None, voice: str | 
     path = DATA_ROOT / "preferences.json"
     data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     data["hotkey_listen"] = value
-    if recognition in {"whisper", "provider"}:
-        data["speech_recognition"] = recognition
+    data["speech_recognition"] = "provider"
     if voice in {"piper", "windows"}:
         data["speech_output"] = voice
     temporary = path.with_suffix(".tmp")

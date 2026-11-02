@@ -222,10 +222,7 @@ class MainWindow:
         key = ttk.Combobox(frame, values=tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"), state="readonly", width=10)
         key.set(self.settings.hotkey_listen.split("+")[-1].upper())
         key.pack(anchor="w", pady=12)
-        ttk.Label(frame, text="Reconocimiento de voz").pack(anchor="w")
-        recognition = ttk.Combobox(frame, state="readonly", values=("Whisper local (base)", "API del proveedor"), width=32)
-        recognition.current(0 if self.settings.speech_recognition == "whisper" else 1)
-        recognition.pack(anchor="w", pady=(4, 12))
+        ttk.Label(frame, text="Reconocimiento: API del proveedor seleccionado.\nEscucha hasta 1 minuto; termina tras 3 segundos de silencio.").pack(anchor="w", pady=(4, 12))
         ttk.Label(frame, text="Voz para leer respuestas").pack(anchor="w")
         voice = ttk.Combobox(frame, state="readonly", values=("Piper · Claude high · español MX", "Voz de Windows"), width=34)
         voice.current(0 if self.settings.speech_output == "piper" else 1)
@@ -234,7 +231,7 @@ class MainWindow:
         ttk.Button(frame, text="Descargar modelos locales", command=self._download_models).pack(anchor="w", pady=10)
         def save():
             value = f"Ctrl+Alt+{key.get()}"
-            selected_recognition = "whisper" if recognition.current() == 0 else "provider"
+            selected_recognition = "provider"
             selected_voice = "piper" if voice.current() == 0 else "windows"
             old = self.settings.hotkey_listen
             if value.upper() == old.upper():
@@ -376,9 +373,10 @@ class MainWindow:
                 self.events.put(("done",))
                 return
             if utterance is None:
-                self.speech.speak_and_wait("Asistente listo.")
-                self.events.put(("status", "Escuchando. Habla ahora."))
-                utterance = self.recognizer.listen(self.cancel_event, self.settings.microphone_max_seconds, self.settings.language)
+                def ready():
+                    self.speech.speak_and_wait("Habla ahora")
+                    self.events.put(("status", "Habla ahora. Hasta 1 minuto o 3 segundos de silencio."))
+                utterance = self.recognizer.listen(self.cancel_event, self.settings.microphone_max_seconds, self.settings.language, on_ready=ready)
             if self.cancel_event.is_set():
                 return
             self.events.put(("transcript", utterance))
@@ -454,8 +452,8 @@ class MainWindow:
                 elif kind == "models_ready":
                     self.downloading_models = False
                     self.speech.engine = self.settings.speech_output
-                    self.status.set("Whisper y Piper listos para usar.")
-                    self.speech.speak("Whisper y Piper están listos para usar.")
+                    self.status.set("Piper listo para usar.")
+                    self.speech.speak("Piper está listo para usar.")
                 elif kind == "models_error":
                     self.downloading_models = False
                     self._announce_error("No pude descargar los modelos. Revisa internet y el espacio disponible e inténtalo de nuevo.")

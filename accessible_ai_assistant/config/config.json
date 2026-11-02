@@ -7,5 +7,5 @@
   "enable_screen_vision": true,
   "learning_mode": true,
   "language": "es-MX",
-  "microphone_max_seconds": 10
+  "microphone_max_seconds": 60
 }

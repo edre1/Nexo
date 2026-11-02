@@ -1,20 +1,14 @@
 # Asistente accesible de Windows — primera versión
 
-## Whisper y Piper locales
+## Reconocimiento y voz
 
-La versión de pruebas utiliza por defecto **Whisper base multilingüe**, con CPU e INT8, para reconocer español, y **Piper es_MX-claude-high** para leer las respuestas.
+Nexo transcribe con la API del proveedor seleccionado: Gemini o `gpt-transcribe` de OpenAI. Whisper se retiró de la aplicación. Piper conserva la voz local **Claude high en español de México**, con la voz de Windows como alternativa.
 
-1. Abre `iniciar.bat` para instalar los componentes nuevos.
-2. Abre Configuración con Ctrl+, y pulsa **Descargar modelos locales**. La primera descarga necesita internet y puede tardar varios minutos. También puedes ejecutar `descargar_modelos.bat`.
-3. Selecciona **Whisper local (base)** y **Piper · Claude high · español MX**, y pulsa Guardar. La selección se conserva para próximas aperturas.
+La escucha dura como máximo **60 segundos** y termina al detectar **3 segundos consecutivos de silencio**. El aviso **«Habla ahora»** se reproduce después de abrir el micrófono; la grabación descarta ese aviso para que no aparezca en la transcripción.
 
-Los modelos se guardan en `%LOCALAPPDATA%\Nexo\models`, compartidos entre las copias de pruebas de esta computadora. Una vez descargados, la transcripción y la lectura no envían audio a servicios externos. Gemini o Luna siguen necesitando conexión para interpretar la petición; el bloqueo de envío sin internet sigue activo.
+En Configuración puedes elegir Piper o Windows. El botón **Descargar modelos locales** descarga únicamente la voz de Piper. Los datos de la voz se guardan en `%LOCALAPPDATA%\Nexo\models`. Las consultas y la transcripción necesitan internet; los avisos de voz funcionan localmente.
 
-El arranque de pruebas instala los componentes en `%LOCALAPPDATA%\Nexo\entorno-pruebas` para evitar el límite de rutas largas de Windows. No necesita modificar la configuración del sistema.
-
-Whisper conserva el modelo en memoria después del primer uso. La primera transcripción puede tardar más; el rendimiento debe medirse en la laptop de destino. Si falla Whisper, Nexo anuncia el error y permite seleccionar la transcripción por API en Configuración. No cambia automáticamente a un servicio externo. Si falla Piper, anuncia el cambio y utiliza la voz de Windows.
-
-Consulta `THIRD_PARTY_AUDIO.md` para los modelos y sus licencias. Estos cambios todavía no se publican en el instalador de producción.
+El arranque de pruebas instala los componentes en `%LOCALAPPDATA%\Nexo\entorno-pruebas` para evitar el límite de rutas largas de Windows. No necesita modificar la configuración del sistema. Estos cambios todavía no se publican en el instalador de producción.
 
 ## Interfaz de chat en pruebas
 
@@ -41,7 +35,7 @@ Los modelos de prueba son `gemini-3.5-flash-lite` y `gpt-6-luna`. La opción de 
 - Micrófono predeterminado, salida de audio y una clave válida de Gemini API o OpenAI API.
 - NVDA es compatible, pero no obligatorio. La voz predeterminada es Piper; Windows SAPI se conserva como alternativa.
 
-El reconocimiento de voz graba localmente un fragmento de hasta 10 segundos y lo transcribe con Whisper. Si seleccionas **API del proveedor** en Configuración, el audio se envía a Gemini o a `gpt-transcribe` de OpenAI. La descripción visual envía una captura al proveedor seleccionado cuando se pregunta por la pantalla. Las consultas a la IA dependen de internet y de los límites de cada cuenta. OpenAI API puede generar cargos por uso.
+El reconocimiento de voz graba hasta 60 segundos, con corte tras 3 segundos de silencio, y envía el audio a Gemini o a `gpt-transcribe` de OpenAI. La descripción visual envía una captura al proveedor seleccionado cuando se pregunta por la pantalla. Las consultas a la IA dependen de internet y de los límites de cada cuenta. OpenAI API puede generar cargos por uso.
 
 ## Instalación y traslado a otra computadora
 
@@ -58,7 +52,7 @@ Si prefieres instalar manualmente, abre PowerShell en esta carpeta y ejecuta `py
 ## Uso y prueba manual completa
 
 1. Abre la aplicación. El estado mostrará qué claves están configuradas y cuál modelo está activo. Usa la lista **Modelo para la siguiente petición** para elegir Gemini o GPT-6 Luna. Solo podrás elegir un modelo si agregaste su clave.
-2. Pulsa `Ctrl+Alt+A`. Se oye «Asistente listo». Habla cuando indique «Escuchando».
+2. Pulsa `Ctrl+Alt+A`. Se oye «Habla ahora» cuando el micrófono está listo.
 3. Di «Abre el Bloc de notas». El modelo seleccionado debe devolver `open_application`; la política admite `notepad`; Windows lo abre y el asistente anuncia el resultado.
 4. Con Bloc de notas al frente, pulsa el atajo y di «¿Qué ventana tengo abierta?». Debe leer el título de Bloc de notas.
 5. Di «Escribe Hola mundo». Confirma en el diálogo con teclado. Debe escribir exactamente ese texto en la ventana que estaba activa al solicitarlo.
@@ -104,7 +98,7 @@ Para mantener la protección, deja `require_confirmation_for_sensitive_actions` 
 - `windows/ui_automation.py` consulta controles; `windows/screen_capture.py` captura bajo demanda; `windows/windows_controller.py` contiene las operaciones de Windows.
 - `ui/main_window.py` muestra el estado, confirmaciones y resultado.
 
-Ambos proveedores usan las mismas instrucciones de acciones y la misma validación local. El selector cambia la interpretación y la descripción visual para la siguiente petición. La transcripción cambia con el proveedor solo si seleccionaste **API del proveedor**; Whisper funciona independientemente de ese selector.
+Ambos proveedores usan las mismas instrucciones de acciones y la misma validación local. El selector cambia la interpretación y la descripción visual para la siguiente petición. La transcripción también cambia con el proveedor seleccionado.
 
 ## Pruebas automáticas
 
