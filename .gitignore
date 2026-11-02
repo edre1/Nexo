@@ -1,0 +1,10 @@
+**/.env
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/logs/
+produccion/build/
+produccion/dist/
+produccion/*.spec
+produccion/*.exe
+produccion/*.log

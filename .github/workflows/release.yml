@@ -1,0 +1,32 @@
+name: Publicar instalador
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Instalar herramientas
+        shell: pwsh
+        run: |
+          python -m venv accessible_ai_assistant/.venv
+          & accessible_ai_assistant/.venv/Scripts/python.exe -m pip install -r accessible_ai_assistant/requirements.txt pyinstaller
+          choco install innosetup --yes --no-progress
+      - name: Compilar instalador
+        shell: pwsh
+        run: '& produccion/compilar.ps1'
+      - name: Publicar en GitHub Releases
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = '${{ github.ref_name }}'.TrimStart('v')
+          $installer = "produccion/Nexo-Setup-$version.exe"
+          if (-not (Test-Path -LiteralPath $installer)) { throw "No se generó $installer. Actualiza la versión en installer.iss y config/release.json." }
+          gh release create '${{ github.ref_name }}' $installer --title "Nexo $version" --generate-notes

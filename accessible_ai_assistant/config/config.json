@@ -1,0 +1,11 @@
+{
+  "ai_provider": "gemini",
+  "model": "gemini-3.5-flash-lite",
+  "hotkey_listen": "Ctrl+Alt+A",
+  "hotkey_cancel": "Ctrl+Alt+Escape",
+  "require_confirmation_for_sensitive_actions": true,
+  "enable_screen_vision": true,
+  "learning_mode": true,
+  "language": "es-MX",
+  "microphone_max_seconds": 10
+}
