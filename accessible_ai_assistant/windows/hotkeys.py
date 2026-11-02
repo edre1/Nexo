@@ -72,3 +72,5 @@ class GlobalHotkeys:
     def close(self) -> None:
         if self.thread_id:
             ctypes.windll.user32.PostThreadMessageW(self.thread_id, WM_QUIT, 0, 0)
+        if self.thread.is_alive() and threading.current_thread() is not self.thread:
+            self.thread.join(timeout=1)

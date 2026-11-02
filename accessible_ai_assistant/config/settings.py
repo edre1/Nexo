@@ -27,6 +27,9 @@ class Settings:
 def load_settings() -> Settings:
     load_dotenv(DATA_ROOT / ".env", override=False)
     data = json.loads((RESOURCE_ROOT / "config" / "config.json").read_text(encoding="utf-8"))
+    preferences = DATA_ROOT / "preferences.json"
+    if preferences.exists():
+        data.update(json.loads(preferences.read_text(encoding="utf-8")))
     selected = str(data.get("ai_provider", "gemini"))
     if selected not in {"gemini", "openai"}:
         selected = "gemini"
@@ -44,3 +47,15 @@ def load_settings() -> Settings:
         api_key=os.environ.get("GEMINI_API_KEY", "").strip(),
         openai_api_key=os.environ.get("OPENAI_API_KEY", "").strip(),
     )
+
+
+def save_listen_hotkey(value: str) -> None:
+    from windows.hotkeys import parse_hotkey
+    parse_hotkey(value)
+    DATA_ROOT.mkdir(parents=True, exist_ok=True)
+    path = DATA_ROOT / "preferences.json"
+    data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    data["hotkey_listen"] = value
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    temporary.replace(path)

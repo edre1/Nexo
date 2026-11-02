@@ -1,5 +1,18 @@
 # Asistente accesible de Windows — primera versión
 
+## Interfaz de chat en pruebas
+
+La ventana muestra la conversación en burbujas y anuncia respuestas y errores con la voz de Windows.
+
+- Enter envía el mensaje escrito. Tab y Mayús+Tab recorren los controles.
+- Alt+M lleva al campo de mensaje; Alt+H lleva a la conversación; F6 alterna entre ambos.
+- Alt+Arriba y Alt+Abajo recorren los mensajes y los leen en voz alta. En la conversación también puedes seleccionar texto y copiar con Ctrl+C.
+- Ctrl+, abre Configuración. Selecciona la letra o número que acompañará a Ctrl+Alt para hablar y pulsa Guardar. Si el atajo está ocupado, se anuncia el error y se conserva el anterior.
+- El atajo se guarda en `preferences.json`, que es una preferencia local y no se publica.
+- Nexo comprueba la conexión al abrir, periódicamente y antes de iniciar una petición. Sin conexión desactiva Escuchar y Enviar, conserva el mensaje escrito y anuncia la desconexión una vez. Al recuperarse la conexión, vuelve a habilitar el envío y lo anuncia.
+
+Estos cambios corresponden a la versión de pruebas. El instalador publicado 1.0.0 no se modifica.
+
 Aplicación de escritorio para pedir por voz o por texto acciones concretas de Windows. Puedes elegir Gemini o GPT-6 Luna en la interfaz para interpretar cada petición. Una política local valida la acción y sus parámetros antes de que el programa toque Windows.
 
 Esta carpeta es la **versión de pruebas con Python**. La versión instalable Nexo para Windows está en `../produccion/Nexo-Setup-1.0.0.exe`.

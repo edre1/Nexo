@@ -1,16 +1,20 @@
 """Keyboard navigable Tk interface. All Tk changes happen on the main thread."""
 from queue import Empty, Queue
+from dataclasses import replace
 import threading
 import webbrowser
+import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 import win32con
 import win32gui
+import win32process
 import pythoncom
 
 from actions.action_registry import Level
 from assistant_service import AssistantService, Prepared
-from config.settings import Settings
+from config.settings import Settings, save_listen_hotkey
+from utils.connectivity import internet_available
 from speech.output import WindowsSpeechOutput
 from speech.recognizer import ProviderSpeechRecognizer, microphone_status
 from updates import check_latest, release_settings
@@ -29,6 +33,10 @@ class MainWindow:
         self.logger = logger
         self.providers = providers
         self.selected = selected
+        self.online = None
+        self.closed = threading.Event()
+        self.messages = []
+        self.message_index = -1
         self.events: Queue[tuple] = Queue()
         self.cancel_event = threading.Event()
         self.busy = False
@@ -40,21 +48,32 @@ class MainWindow:
             self.hotkeys.start()
             self.status.set(f"Listo. Atajo para escuchar: {settings.hotkey_listen}.")
         except Exception as exc:
-            self.status.set(str(exc))
+            self._announce_error(str(exc))
             self.logger.error("Fallo de atajo global: %s", type(exc).__name__)
         self.root.after(100, self._drain)
         self.root.after(500, self._track_target)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
+        self.root.report_callback_exception = lambda _kind, exc, _tb: self._announce_error(self._friendly_error(exc))
+        threading.Thread(target=self._monitor_connection, daemon=True).start()
 
     def _build(self):
-        self.root.title("Nexo")
-        self.root.geometry("680x680")
+        self.root.title("Nexo · Pruebas")
+        self.root.geometry("820x760")
         self.root.minsize(520, 500)
         body = ttk.Frame(self.root, padding=16)
         body.pack(fill="both", expand=True)
+        menu = tk.Menu(self.root)
+        options = tk.Menu(menu, tearoff=False)
+        options.add_command(label="Configurar atajo…", accelerator="Ctrl+,", command=self._settings_dialog)
+        options.add_command(label="Buscar actualizaciones", command=self._check_updates)
+        menu.add_cascade(label="Configuración", underline=0, menu=options)
+        self.root.config(menu=menu)
+        ttk.Label(body, text="Nexo", font=("Segoe UI", 22, "bold")).pack(anchor="w")
         self.status = tk.StringVar(value="Iniciando asistente.")
         ttk.Label(body, text="Estado del asistente").pack(anchor="w")
         ttk.Label(body, textvariable=self.status, wraplength=620).pack(anchor="w", pady=(0, 10))
+        self.connection_status = tk.StringVar(value="Comprobando conexión a internet…")
+        ttk.Label(body, textvariable=self.connection_status).pack(anchor="w", pady=(0, 8))
         self.provider_status = tk.StringVar()
         ttk.Label(body, text="Estado del proveedor de inteligencia artificial").pack(anchor="w")
         ttk.Label(body, textvariable=self.provider_status, wraplength=620).pack(anchor="w", pady=(0, 8))
@@ -73,25 +92,37 @@ class MainWindow:
         self.listen_button = ttk.Button(buttons, text="Escuchar", command=self._start_voice)
         self.listen_button.pack(side="left", padx=(0, 8))
         ttk.Button(buttons, text="Detener o cancelar", command=self._cancel).pack(side="left")
-        ttk.Button(buttons, text="Buscar actualizaciones", command=self._check_updates).pack(side="left", padx=(8, 0))
-        ttk.Label(body, text="Escribe una petición para probar sin micrófono").pack(anchor="w")
+        ttk.Button(buttons, text="Configuración", command=self._settings_dialog).pack(side="left", padx=(8, 0))
+        ttk.Label(body, text="Conversación · Alt+H para leer; Alt+Arriba/Abajo recorre mensajes").pack(anchor="w")
+        chat_frame = ttk.Frame(body)
+        chat_frame.pack(fill="both", expand=True, pady=(6, 12))
+        self.chat = tk.Text(chat_frame, wrap="word", font=("Segoe UI", 12), background="#f3f5fa", foreground="#172238", relief="flat", padx=16, pady=14, takefocus=True, height=10)
+        scroll = ttk.Scrollbar(chat_frame, command=self.chat.yview)
+        self.chat.configure(yscrollcommand=scroll.set)
+        scroll.pack(side="right", fill="y")
+        self.chat.pack(fill="both", expand=True)
+        self.chat.tag_configure("user", background="#dce9ff", lmargin1=120, lmargin2=120, rmargin=16, spacing1=12, spacing3=12)
+        self.chat.tag_configure("assistant", background="#ffffff", lmargin1=16, lmargin2=16, rmargin=100, spacing1=12, spacing3=12)
+        self.chat.tag_configure("error", background="#ffe4e3", foreground="#851c16", lmargin1=16, lmargin2=16, rmargin=60, spacing1=12, spacing3=12)
+        self.chat.bind("<KeyPress>", self._chat_key)
+        self.chat.bind("<Tab>", lambda _e: self._focus_input())
+        self.chat.bind("<Shift-Tab>", lambda _e: self._previous_focus())
+        ttk.Label(body, text="Mensaje · Enter para enviar · Alt+M para escribir").pack(anchor="w")
         self.command_entry = ttk.Entry(body)
         self.command_entry.pack(fill="x", pady=(0, 5))
         self.command_entry.bind("<Return>", lambda _event: self._start_text())
-        ttk.Button(body, text="Enviar petición escrita", command=self._start_text).pack(anchor="w", pady=(0, 10))
-        ttk.Label(body, text="Texto entendido del usuario").pack(anchor="w")
-        self.transcript = tk.Text(body, height=3, wrap="word", takefocus=True)
-        self.transcript.pack(fill="x", pady=(0, 10))
-        self.transcript.config(state="disabled")
-        ttk.Label(body, text="Respuesta del asistente").pack(anchor="w")
-        self.response = tk.Text(body, height=4, wrap="word", takefocus=True)
-        self.response.pack(fill="x", pady=(0, 10))
-        self.response.config(state="disabled")
-        ttk.Label(body, text="Registro de las últimas acciones").pack(anchor="w")
-        self.history = tk.Listbox(body, height=7)
-        self.history.pack(fill="both", expand=True)
+        self.send_button = ttk.Button(body, text="Enviar mensaje", command=self._start_text)
+        self.send_button.pack(anchor="e", pady=(0, 10))
+        self._append_message("assistant", "Hola. Soy Nexo. Escribe un mensaje o usa el atajo de voz. Puedes revisar la conversación con Alt+H.")
+        self._sync_controls()
         self.command_entry.focus_set()
         self.root.bind("<Escape>", lambda _event: self._cancel())
+        self.root.bind("<Control-comma>", lambda _e: self._settings_dialog())
+        self.root.bind("<Alt-m>", lambda _e: self._focus_input())
+        self.root.bind("<Alt-h>", lambda _e: self.chat.focus_set())
+        self.root.bind("<Alt-Up>", lambda _e: self._read_message(-1))
+        self.root.bind("<Alt-Down>", lambda _e: self._read_message(1))
+        self.root.bind("<F6>", lambda _e: self._focus_input() if self.root.focus_get() == self.chat else self.chat.focus_set())
 
     @staticmethod
     def _set_text(widget: tk.Text, text: str):
@@ -100,14 +131,137 @@ class MainWindow:
         widget.insert("1.0", text)
         widget.config(state="disabled")
 
+    def _append_message(self, role, text):
+        start = self.chat.index("end-1c")
+        who = "Tú" if role == "user" else "Error" if role == "error" else "Nexo"
+        self.chat.insert("end", f"{who}\n{text}\n\n", role)
+        self.messages.append((start, f"{who}: {text}"))
+        self.message_index = len(self.messages) - 1
+        self.chat.see("end")
+
+    def _chat_key(self, event):
+        if event.state & 4 and event.keysym.lower() in {"c", "a"}:
+            if event.keysym.lower() == "a":
+                self.chat.tag_add("sel", "1.0", "end-1c")
+                return "break"
+            return None
+        if event.keysym in {"Left", "Right", "Up", "Down", "Home", "End", "Prior", "Next", "Tab", "Escape", "F6"} or event.state & (8 | 0x20000) or (event.state & 4 and event.keysym == "comma"):
+            return None
+        return "break"
+
+    def _focus_input(self):
+        self.command_entry.focus_set()
+        return "break"
+
+    def _previous_focus(self):
+        self.chat.tk_focusPrev().focus_set()
+        return "break"
+
+    def _read_message(self, direction):
+        if self.messages:
+            self.message_index = max(0, min(len(self.messages) - 1, self.message_index + direction))
+            position, text = self.messages[self.message_index]
+            self.chat.focus_set()
+            self.chat.mark_set("insert", position)
+            self.chat.see(position)
+            self.speech.speak(text)
+        return "break"
+
+    def _announce_error(self, text):
+        self.status.set(text)
+        self._append_message("error", text)
+        self.speech.speak(text)
+
+    def _sync_controls(self):
+        allowed = bool(self.online) and not self.busy
+        self.listen_button.config(state="normal" if allowed else "disabled")
+        self.send_button.config(state="normal" if allowed else "disabled")
+        self.provider_combo.config(state="disabled" if self.busy else "readonly")
+
+    def _monitor_connection(self):
+        while not self.closed.is_set():
+            connected = internet_available()
+            if not self.closed.is_set():
+                self.events.put(("connection", connected))
+            self.closed.wait(5)
+
+    def _apply_connection(self, connected):
+        previous = self.online
+        self.online = connected
+        text = "Conectado a internet." if connected else "Sin conexión a internet. El envío y el micrófono están desactivados."
+        self.connection_status.set(text)
+        self._sync_controls()
+        if previous != connected and (not connected or previous is False):
+            self._append_message("assistant", text)
+            self.speech.speak(text)
+
+    def _can_send(self):
+        if self.busy:
+            return False
+        if not self.online:
+            self.speech.speak("Sin conexión a internet. No se puede enviar la petición." if self.online is False else "Espera mientras compruebo la conexión a internet.")
+            return False
+        if self.selected not in self.providers:
+            self._announce_error("Falta configurar una clave API. Agrega una clave y reinicia Nexo.")
+            return False
+        return True
+
+    def _settings_dialog(self):
+        if self.busy:
+            self.speech.speak("Espera a que termine la petición antes de cambiar el atajo.")
+            return "break"
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Configuración de Nexo")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        frame = ttk.Frame(dialog, padding=20)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="Atajo para hablar: Ctrl+Alt más una letra o número.").pack(anchor="w")
+        key = ttk.Combobox(frame, values=tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"), state="readonly", width=10)
+        key.set(self.settings.hotkey_listen.split("+")[-1].upper())
+        key.pack(anchor="w", pady=12)
+        def save():
+            value = f"Ctrl+Alt+{key.get()}"
+            old = self.settings.hotkey_listen
+            if value.upper() == old.upper():
+                dialog.destroy()
+                return
+            self.hotkeys.close()
+            candidate = GlobalHotkeys(value, self.settings.hotkey_cancel, self._hotkey_event)
+            try:
+                candidate.start()
+                save_listen_hotkey(value)
+            except Exception as exc:
+                candidate.close()
+                self.hotkeys = GlobalHotkeys(old, self.settings.hotkey_cancel, self._hotkey_event)
+                try:
+                    self.hotkeys.start()
+                except Exception as restore_error:
+                    self._announce_error(str(restore_error))
+                self._announce_error(f"No pude cambiar el atajo. {self._friendly_error(exc)}")
+                return
+            self.hotkeys = candidate
+            self.settings = replace(self.settings, hotkey_listen=value)
+            self.status.set(f"Atajo para hablar: {value}.")
+            self.speech.speak(f"Atajo guardado: {value}.")
+            dialog.destroy()
+        ttk.Button(frame, text="Guardar", command=save).pack(side="left", padx=(0, 10))
+        ttk.Button(frame, text="Cancelar", command=dialog.destroy).pack(side="left")
+        dialog.bind("<Escape>", lambda _e: dialog.destroy())
+        dialog.bind("<Return>", lambda _e: save())
+        key.focus_set()
+        self.root.wait_window(dialog)
+        self.command_entry.focus_set()
+        return "break"
+
     def _target(self) -> int:
         active = win32gui.GetForegroundWindow()
-        if active and active != self.own_hwnd:
+        if active and win32process.GetWindowThreadProcessId(active)[1] != os.getpid():
             self.last_target = active
         return self.last_target
 
     def _check_updates(self):
-        if self.busy:
+        if not self._can_send():
             return
         self.status.set("Buscando actualizaciones en GitHub.")
         def work():
@@ -131,7 +285,7 @@ class MainWindow:
             return
         if requested not in self.providers:
             self.provider_combo.current(0 if self.selected != "openai" else 1)
-            self.status.set(f"Falta la clave de {'OpenAI' if requested == 'openai' else 'Gemini'}. Agrégala en .env y reinicia.")
+            self._announce_error(f"Falta la clave de {'OpenAI' if requested == 'openai' else 'Gemini'}. Agrégala en .env y reinicia.")
             return
         self.selected = requested
         provider = self.providers[requested]
@@ -150,34 +304,36 @@ class MainWindow:
         self.events.put((event, target))
 
     def _start_voice(self, target: int | None = None):
-        if self.busy:
+        if not self._can_send():
             return
         target = self._target() if target is None else target
         self.busy = True
         self.cancel_event.clear()
         self.status.set("Preparando micrófono.")
-        self.listen_button.config(state="disabled")
-        self.provider_combo.config(state="disabled")
+        self._sync_controls()
         threading.Thread(target=self._worker, args=(None, target), daemon=True).start()
 
     def _start_text(self):
-        if self.busy:
+        if not self._can_send():
             return
         utterance = self.command_entry.get().strip()
         if not utterance:
-            self.status.set("Escribe una petición primero.")
+            self._announce_error("Escribe una petición primero.")
             return
         target = self._target()
         self.busy = True
         self.cancel_event.clear()
-        self.listen_button.config(state="disabled")
-        self.provider_combo.config(state="disabled")
+        self._sync_controls()
         threading.Thread(target=self._worker, args=(utterance, target), daemon=True).start()
 
     def _worker(self, utterance: str | None, target: int):
         pythoncom.CoInitialize()
         pending_confirmation = False
         try:
+            if not internet_available():
+                self.events.put(("connection", False))
+                self.events.put(("done",))
+                return
             if utterance is None:
                 self.speech.speak_and_wait("Asistente listo.")
                 self.events.put(("status", "Escuchando. Habla ahora."))
@@ -249,6 +405,8 @@ class MainWindow:
                     self._cancel()
                 elif kind == "status":
                     self.status.set(event[1])
+                elif kind == "connection":
+                    self._apply_connection(event[1])
                 elif kind == "update":
                     if event[1] is None:
                         self.status.set(f"La versión {release_settings()['version']} está actualizada.")
@@ -258,9 +416,10 @@ class MainWindow:
                         if messagebox.askyesno("Actualización disponible", f"Hay una versión {version}. ¿Quieres abrir la página de descarga en GitHub?", parent=self.root):
                             webbrowser.open(page)
                 elif kind == "update_error":
-                    self.status.set(f"No pude buscar actualizaciones: {event[1][:180]}")
+                    self._announce_error(f"No pude buscar actualizaciones: {event[1][:180]}")
                 elif kind == "transcript":
-                    self._set_text(self.transcript, event[1])
+                    self._append_message("user", event[1])
+                    self.command_entry.delete(0, "end")
                 elif kind == "confirm":
                     prepared, utterance = event[1], event[2]
                     if self.cancel_event.is_set():
@@ -276,6 +435,7 @@ class MainWindow:
                         prompt = f"La acción {action} puede cambiar contenido. ¿Confirmas?"
                     if detail:
                         prompt += f"\n\nTexto: {detail}"
+                    self.speech.speak(prompt)
                     if messagebox.askyesno("Confirmar acción", prompt, parent=self.root):
                         threading.Thread(target=self._confirmed_worker, args=(prepared, utterance), daemon=True).start()
                     else:
@@ -289,8 +449,7 @@ class MainWindow:
                         self._finish(event[1], "error")
                 elif kind == "done":
                     self.busy = False
-                    self.listen_button.config(state="normal")
-                    self.provider_combo.config(state="readonly")
+                    self._sync_controls()
                     if self.cancel_event.is_set():
                         self.status.set("Acción cancelada.")
         except Empty:
@@ -305,21 +464,18 @@ class MainWindow:
             pythoncom.CoUninitialize()
 
     def _finish(self, result: str, label: str):
-        self.status.set("Listo.")
-        self._set_text(self.response, result)
-        self.history.insert(0, f"{label}: {result[:120]}")
-        while self.history.size() > 20:
-            self.history.delete("end")
+        self.status.set(result if label == "error" else "Listo.")
+        self._append_message("error" if label == "error" else "assistant", result)
         self.speech.speak(result)
         self.busy = False
-        self.listen_button.config(state="normal")
-        self.provider_combo.config(state="readonly")
+        self._sync_controls()
 
     def _cancel(self):
         self.cancel_event.set()
         self.status.set("Cancelando; espera a que termine la petición en curso.")
 
     def _close(self):
+        self.closed.set()
         self.cancel_event.set()
         self.hotkeys.close()
         self.speech.close()
