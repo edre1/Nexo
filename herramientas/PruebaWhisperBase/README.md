@@ -1,14 +1,13 @@
-# Prueba independiente de Whisper base
+# Comparación de Whisper base y Gemini
 
-Haz doble clic en **iniciar_prueba.bat**. Usa Python 3.12 o 3.13 en Windows; si ya probaste Nexo, aprovecha sus componentes y su modelo descargado. En otra computadora instala solo Whisper y el micrófono, sin necesitar Nexo ni claves API. La primera instalación y descarga requieren internet.
+Haz doble clic en **iniciar_prueba.bat**. Puedes grabar con **F2**, detener con **F2**, abrir audio con **F3** y enfocar los resultados con **F6**.
 
-1. Si no tienes el modelo, pulsa **Descargar modelo**.
-2. Pulsa **Grabar** o **F2**. Espera el aviso **Habla ahora** y el sonido antes de empezar a hablar.
-3. Pulsa **F2** otra vez para terminar; también termina al alcanzar el máximo elegido. No corta por silencio.
-4. Revisa la transcripción y los segundos que tardó en procesarla. Puedes abrir una grabación con **F3** y enfocar los resultados con **F6**.
+La casilla **Comparar también con Gemini** activa el modelo que usaba Nexo al principio: `gemini-3.5-flash-lite`, con la misma instrucción de transcripción. Whisper base sigue trabajando en CPU e INT8. Cada modelo recibe exactamente el mismo audio WAV. Las peticiones a Gemini necesitan internet y están sujetas a los límites y condiciones de tu cuenta. Desmarca la casilla para mantener el audio solo en la computadora.
 
-La grabación se mantiene en memoria y no se guarda en disco. No ejecuta ninguna orden: si dices «abre la calculadora», solo escribe esas palabras. La transcripción usa CPU, INT8, cuatro hilos, idioma español y los mismos ajustes que la versión de pruebas de Nexo. No envía el audio a una API.
+El campo de clave está oculto y no se guarda. En la carpeta de pruebas entregada se puede reutilizar la clave de la copia de Nexo que está al lado; también puedes pegarla en el campo o usar la variable de entorno `GEMINI_API_KEY`. No se incluyen claves en el ZIP.
 
-En pruebas de micrófono el modelo se carga antes de grabar para que el aviso sea preciso. En pruebas con archivo se informa la carga inicial por separado; repite la misma prueba para comparar con el modelo ya cargado. La primera carga tarda más. `transcripcion_segundos` mide la espera después de terminar el audio; `audio_segundos` es la duración del audio.
+Los resultados muestran el texto y el tiempo de cada modelo. La carga inicial de Whisper se informa aparte; en pruebas de micrófono se carga antes de grabar. El tiempo de Gemini incluye la petición por internet. Los modelos se ejecutan uno después del otro y se miden por separado. Si uno falla, se conserva el resultado del otro. Para comparar precisión, di una frase conocida y revisa cuál reproduce mejor sus palabras; esta prueba no asigna una puntuación automática de precisión.
 
-Para probar sin interfaz desde consola: `python prueba_whisper.py --archivo grabacion.wav`.
+No se guardan las grabaciones del micrófono ni se ejecutan las órdenes que pronuncies. La primera instalación y la descarga de Whisper requieren internet; si ya probaste Nexo, aprovecha sus componentes y su modelo. En otra computadora necesita Python 3.12 o 3.13.
+
+Desde consola: `python prueba_whisper.py --archivo grabacion.wav --comparar`. Sin `--comparar`, transcribe solo con Whisper.

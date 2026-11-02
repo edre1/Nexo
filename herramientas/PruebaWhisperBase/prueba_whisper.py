@@ -1,4 +1,4 @@
-"""Standalone CPU benchmark: microphone or file -> Whisper base, without Nexo/API."""
+"""Compare Whisper base locally with Nexo's original Gemini transcription."""
 import argparse
 from io import BytesIO
 import json
@@ -13,6 +13,51 @@ LOCAL = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
 NEXO_MODEL = LOCAL / "Nexo" / "models" / "whisper-base"
 MODEL_PATH = NEXO_MODEL if (NEXO_MODEL / "model.bin").exists() else LOCAL / "PruebaWhisperBase" / "modelo-base"
 PROMPT = "Nombres: Nexo, Bloc de notas, Chrome, Word, Visual Studio Code."
+GEMINI_MODEL = "gemini-3.5-flash-lite"
+
+
+def available_key():
+    if os.environ.get("GEMINI_API_KEY"):
+        return os.environ["GEMINI_API_KEY"].strip()
+    # Reuse a configured local copy, without copying or printing its key.
+    from dotenv import dotenv_values
+    root = Path(__file__).resolve().parent
+    for path in (root / ".env", root.parent / "AsistenteAccesibleWindows" / "accessible_ai_assistant" / ".env"):
+        if path.is_file():
+            value = dotenv_values(path).get("GEMINI_API_KEY")
+            if value:
+                return value.strip()
+    return ""
+
+
+def wav_from_file(path):
+    from faster_whisper.audio import decode_audio
+    samples = decode_audio(path, sampling_rate=16000)
+    audio = BytesIO()
+    with wave.open(audio, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes((samples.clip(-1, 1) * 32767).astype("int16").tobytes())
+    return audio.getvalue()
+
+
+def gemini_transcribe(audio, key):
+    if not key:
+        raise ValueError("Falta la clave de Gemini. Pégala en el campo Clave API.")
+    from google import genai
+    from google.genai import types
+    start = time.perf_counter()
+    with genai.Client(api_key=key, http_options=types.HttpOptions(timeout=30000)) as client:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=["Transcribe literalmente esta voz en es-MX. Devuelve solo las palabras pronunciadas, sin comentarios.", types.Part.from_bytes(data=audio, mime_type="audio/wav")],
+            config=types.GenerateContentConfig(temperature=0),
+        )
+    text = (response.text or "").strip().strip('"')
+    if not text:
+        raise ValueError("Gemini no devolvió una transcripción.")
+    return {"modelo": GEMINI_MODEL, "texto": text[:2000], "peticion_segundos": round(time.perf_counter() - start, 3)}
 
 
 class Benchmark:
@@ -36,19 +81,41 @@ class Benchmark:
         elapsed = time.perf_counter() - start
         return {"texto": text or "[No se detectaron palabras]", "audio_segundos": round(info.duration, 3), "carga_modelo_segundos": round(loading, 3), "transcripcion_segundos": round(elapsed, 3), "total_segundos": round(loading + elapsed, 3)}
 
+    def compare(self, audio, key="", include_gemini=True):
+        report = {"comparacion": "Mismo audio WAV para ambos modelos; tiempos medidos por separado."}
+        try:
+            report["Whisper base (local)"] = self.transcribe(BytesIO(audio))
+        except Exception as exc:
+            report["Whisper base (local)"] = {"error": str(exc)}
+        if include_gemini:
+            try:
+                report["Gemini (original de Nexo)"] = gemini_transcribe(audio, key)
+            except ValueError as exc:
+                report["Gemini (original de Nexo)"] = {"error": str(exc) if not key or "transcripción" in str(exc) else "Gemini rechazó la petición. Revisa la clave, el modelo y los límites de tu cuenta."}
+            except Exception:
+                report["Gemini (original de Nexo)"] = {"error": "No se pudo consultar Gemini. Revisa internet, la clave y los límites de tu cuenta."}
+        return report
+
 
 def run_gui():
     import tkinter as tk
     from tkinter import ttk, filedialog
 
     root = tk.Tk()
-    root.title("Prueba independiente · Whisper base")
-    root.geometry("760x620")
+    root.title("Comparación · Whisper base y Gemini")
+    root.geometry("800x780")
     root.minsize(560, 480)
     frame = ttk.Frame(root, padding=20)
     frame.pack(fill="both", expand=True)
-    ttk.Label(frame, text="Whisper base · CPU / INT8", font=("Segoe UI", 18, "bold")).pack(anchor="w")
-    ttk.Label(frame, text="Solo transcribe: no envía audio a una API ni ejecuta las órdenes que pronuncies.", wraplength=700).pack(anchor="w", pady=8)
+    ttk.Label(frame, text="Whisper base frente a Gemini", font=("Segoe UI", 18, "bold")).pack(anchor="w")
+    ttk.Label(frame, text="Whisper procesa localmente. Al comparar, la misma grabación también se envía a Gemini. Solo transcribe; no ejecuta órdenes.", wraplength=700).pack(anchor="w", pady=8)
+    compare = tk.BooleanVar(value=True)
+    compare_box = ttk.Checkbutton(frame, text=f"Comparar también con Gemini ({GEMINI_MODEL})", variable=compare)
+    compare_box.pack(anchor="w")
+    ttk.Label(frame, text="Clave API de Gemini · no se guarda ni aparece en los resultados").pack(anchor="w", pady=(6, 0))
+    key_entry = ttk.Entry(frame, show="*")
+    key_entry.insert(0, available_key())
+    key_entry.pack(fill="x", pady=5)
     status = tk.StringVar(value="Listo. F2 inicia o detiene la grabación; F3 abre un archivo.")
     ttk.Label(frame, textvariable=status, wraplength=700).pack(anchor="w", pady=8)
     ttk.Label(frame, text="Tiempo máximo de grabación (segundos)").pack(anchor="w")
@@ -73,6 +140,8 @@ def run_gui():
         state["busy"] = busy
         for button in (record_button, file_button, download_button):
             button.config(state="disabled" if busy else "normal")
+        key_entry.config(state="disabled" if busy else "normal")
+        compare_box.config(state="disabled" if busy else "normal")
 
     def start_work(work):
         controls(True)
@@ -98,9 +167,13 @@ def run_gui():
             status.set("Elige un tiempo entre 3 y 120 segundos.")
             return
         stop.clear()
+        api_key, use_gemini = key_entry.get().strip(), compare.get()
         state["recording"] = True
         def work():
-            benchmark.load()  # Load before asking the user to speak.
+            try:
+                benchmark.load()  # Load before asking the user to speak.
+            except Exception:
+                pass  # Show an independent error for Whisper in the comparison.
             if stop.is_set():
                 raise ValueError("Grabación cancelada antes de abrir el micrófono.")
             import sounddevice as sd
@@ -124,7 +197,7 @@ def run_gui():
                 wav.setframerate(16000)
                 wav.writeframes(b"".join(chunks))
             audio.seek(0)
-            return benchmark.transcribe(audio)
+            return benchmark.compare(audio.getvalue(), api_key, use_gemini)
         status.set("Cargando modelo; espera el aviso Habla ahora.")
         start_work(work)
 
@@ -133,8 +206,9 @@ def run_gui():
             return
         path = filedialog.askopenfilename(parent=root, title="Selecciona audio", filetypes=[("Audio", "*.wav *.mp3 *.m4a *.flac *.ogg"), ("Todos", "*.*")])
         if path:
-            status.set("Transcribiendo el archivo localmente…")
-            start_work(lambda: benchmark.transcribe(path))
+            api_key, use_gemini = key_entry.get().strip(), compare.get()
+            status.set("Comparando el archivo de audio…")
+            start_work(lambda: benchmark.compare(wav_from_file(path), api_key, use_gemini))
 
     def download():
         if state["busy"]:
@@ -156,7 +230,7 @@ def run_gui():
             elif kind == "processing":
                 state["recording"] = False
                 record_button.config(state="disabled")
-                status.set("Transcribiendo localmente…")
+                status.set("Transcribiendo con los modelos elegidos…")
             else:
                 state["recording"] = False
                 controls(False)
@@ -192,8 +266,9 @@ def run_gui():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--archivo", help="Transcribe un archivo y muestra mediciones en consola, sin abrir la interfaz.")
+    parser.add_argument("--comparar", action="store_true", help="También envía el mismo audio a Gemini; usa GEMINI_API_KEY o la clave local de Nexo.")
     args = parser.parse_args()
     if args.archivo:
-        print(json.dumps(Benchmark().transcribe(args.archivo), ensure_ascii=False, indent=2))
+        print(json.dumps(Benchmark().compare(wav_from_file(args.archivo), available_key(), args.comparar), ensure_ascii=False, indent=2))
     else:
         run_gui()
