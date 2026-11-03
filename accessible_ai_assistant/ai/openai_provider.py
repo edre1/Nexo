@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from actions.action_models import AIReply, ActionName
 from ai.base_provider import AIProvider
 from ai.instructions import action_instructions, screen_instructions
+from ai.reasoning_policy import choose_reasoning
 
 
 class ActionParameters(BaseModel):
@@ -37,11 +38,23 @@ class OpenAIProvider(AIProvider):
             raise ValueError("Falta OPENAI_API_KEY. Consulta README.md.")
         self.client = OpenAI(api_key=api_key, timeout=30.0, max_retries=1)
         self.model = model
+        self.on_reasoning = None
+
+    def reasoning_for(self, request, phase="interpret", recent="", escalate=False):
+        choice = choose_reasoning(request, phase, recent, escalate)
+        self.last_reasoning = choice
+        callback = getattr(self, "on_reasoning", None)
+        if callback:
+            callback(choice, phase)
+        return {"effort": choice.effort}
 
     def interpret(self, utterance: str, context: str, history: list[tuple[str, str]], learning_mode: bool) -> AIReply:
         recent = "\n".join(f"Usuario: {u}\nAsistente: {a}" for u, a in history[-3:])
+        reasoning = self.reasoning_for(utterance, "interpret", recent)
         response = self.client.responses.parse(
             model=self.model,
+            reasoning=reasoning,
+            timeout=60.0 if reasoning["effort"] == "high" else 30.0,
             instructions=action_instructions(learning_mode) + (
                 " Devuelve todos los campos de parameters como cadenas vacías salvo los necesarios "
                 "para la acción elegida. Si respondes sin acción, action debe ser null."
@@ -80,8 +93,11 @@ class OpenAIProvider(AIProvider):
 
     def describe_image(self, png_bytes: bytes, context: str, question: str) -> str:
         image_url = "data:image/png;base64," + base64.b64encode(png_bytes).decode("ascii")
+        reasoning = self.reasoning_for(question, "vision")
         response = self.client.responses.create(
             model=self.model,
+            reasoning=reasoning,
+            timeout=60.0 if reasoning["effort"] == "high" else 30.0,
             instructions=screen_instructions(),
             input=[{"role": "user", "content": [
                 {"type": "input_text", "text": f"Pregunta del usuario: {question}\nContexto de accesibilidad: {context}"},

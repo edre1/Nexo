@@ -42,6 +42,8 @@ class MainWindow:
         self.messages = []
         self.message_index = -1
         self.events: Queue[tuple] = Queue()
+        if "openai" in self.providers:
+            self.providers["openai"].on_reasoning = lambda choice, phase: self.events.put(("reasoning", choice, phase))
         self.cancel_event = threading.Event()
         self.busy = False
         self.last_target = 0
@@ -82,6 +84,8 @@ class MainWindow:
         self.provider_status = tk.StringVar()
         ttk.Label(body, text="Estado del proveedor de inteligencia artificial").pack(anchor="w")
         ttk.Label(body, textvariable=self.provider_status, wraplength=620).pack(anchor="w", pady=(0, 8))
+        self.reasoning_status = tk.StringVar(value="Luna: razonamiento automático. Alt+R lee el nivel elegido." if self.selected == "openai" else "Razonamiento automático de Nexo: disponible al seleccionar Luna.")
+        ttk.Label(body, textvariable=self.reasoning_status, wraplength=740).pack(anchor="w", pady=(0, 8))
         ttk.Label(body, text="Modelo para la siguiente petición").pack(anchor="w")
         self.provider_choice = tk.StringVar(value=self.selected or "gemini")
         self.provider_combo = ttk.Combobox(body, textvariable=self.provider_choice, state="readonly", values=("Gemini", "GPT-6 Luna"))
@@ -125,6 +129,7 @@ class MainWindow:
         self.root.bind("<Control-comma>", lambda _e: self._settings_dialog())
         self.root.bind("<Alt-m>", lambda _e: self._focus_input())
         self.root.bind("<Alt-h>", lambda _e: self.chat.focus_set())
+        self.root.bind("<Alt-r>", lambda _e: self.speech.speak(self.reasoning_status.get()))
         self.root.bind("<Alt-Up>", lambda _e: self._read_message(-1))
         self.root.bind("<Alt-Down>", lambda _e: self._read_message(1))
         self.root.bind("<F6>", lambda _e: self._focus_input() if self.root.focus_get() == self.chat else self.chat.focus_set())
@@ -334,6 +339,7 @@ class MainWindow:
         self.service.executor.provider = provider
         self.recognizer.provider = provider
         self._update_provider_status()
+        self.reasoning_status.set("Luna: razonamiento automático; se elegirá al enviar la petición." if requested == "openai" else "Razonamiento automático de Nexo: disponible al seleccionar Luna.")
         self.status.set(f"Modelo seleccionado: {'GPT-6 Luna' if requested == 'openai' else 'Gemini'}.")
 
     def _track_target(self):
@@ -478,6 +484,10 @@ class MainWindow:
                     self.status.set(event[1])
                 elif kind == "connection":
                     self._apply_connection(event[1])
+                elif kind == "reasoning":
+                    choice, phase = event[1:]
+                    phases = {"interpret": "interpretar la petición", "vision": "analizar la pantalla", "computer": "controlar la ventana"}
+                    self.reasoning_status.set(f"Luna · razonamiento {choice.label} para {phases[phase]}: {choice.reason}.")
                 elif kind == "voice_warning":
                     self.status.set(event[1])
                     self._append_message("error", event[1])

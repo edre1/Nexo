@@ -19,6 +19,7 @@ class ComputerTests(unittest.TestCase):
     def setup_session(self, replies, confirm=True, **kwargs):
         provider = Mock()
         provider.model = 'gpt-6-luna'
+        provider.reasoning_for.return_value = {'effort': 'medium'}
         provider.client.responses.create.side_effect = replies
         driver = Mock()
         driver.capture.return_value = b'fake PNG'
@@ -34,6 +35,7 @@ class ComputerTests(unittest.TestCase):
         self.assertEqual(driver.capture.call_count, 2)
         kwargs = provider.client.responses.create.call_args.kwargs
         self.assertEqual(kwargs['tools'], [{'type': 'computer'}])
+        self.assertEqual(kwargs['reasoning'], {'effort': 'medium'})
         self.assertEqual(kwargs['input'][-1]['type'], 'computer_call_output')
         self.assertFalse(kwargs['store'])
 
@@ -63,6 +65,13 @@ class ComputerTests(unittest.TestCase):
         session, _, driver = self.setup_session([response([{'type': 'screenshot'}])], max_turns=1)
         with self.assertRaisesRegex(RuntimeError, 'límite de pasos'):
             session.run('Revisa')
+
+    def test_visual_steps_request_escalation_after_four_turns(self):
+        session, provider, _ = self.setup_session([response([{'type': 'screenshot'}]) for _ in range(5)] + [response()])
+        session.run('Mueve el puntero')
+        calls = provider.reasoning_for.call_args_list
+        self.assertFalse(calls[0].kwargs['escalate'])
+        self.assertTrue(calls[4].kwargs['escalate'])
 
     def test_old_single_action_shape_is_accepted(self):
         session, provider, driver = self.setup_session([SimpleNamespace(status='completed', output=[item({'type': 'computer_call', 'call_id': 'c', 'action': {'type': 'move', 'x': 1, 'y': 2}})], output_text=''), response()])

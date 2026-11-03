@@ -1,5 +1,13 @@
 # Asistente accesible de Windows — primera versión
 
+## Razonamiento automático de Luna
+
+Nexo elige y envía explícitamente `reasoning.effort` en cada consulta a GPT-6 Luna. Usa **bajo** para órdenes breves como «Abre la calculadora», **medio** para consultas generales y **alto** para análisis, comparación o tareas con varios pasos. La elección usa reglas locales: no añade una consulta extra a la API. Es una estimación del tipo de petición, no una medición exacta de su dificultad; en casos dudosos usa medio.
+
+Para interpretar imágenes o manejar la ventana se utiliza al menos medio. Si el control visual necesita más de cuatro respuestas, sube a alto para los siguientes pasos. Las continuaciones breves como «Sí, hazlo» toman en cuenta el diálogo reciente. La transcripción de voz no utiliza este ajuste.
+
+La interfaz muestra el nivel solicitado y la fase de la tarea; **Alt+R** lo lee en voz alta. Ese indicador muestra el esfuerzo enviado a OpenAI, no el razonamiento interno del modelo. Las confirmaciones y los límites del control visual siguen aplicándose con cualquier nivel. Un nivel alto puede tardar más y consumir más tokens; esta selección no garantiza un ahorro ni una respuesta correcta en todos los casos.
+
 ## Control visual de Luna en pruebas
 
 Selecciona **GPT-6 Luna**, activa primero la ventana que quieres manejar y utiliza el atajo de voz. También puedes volver a Nexo y escribir una petición sobre la última ventana activa. Prueba con «Mueve el puntero al centro de la ventana» o «Haz clic en el cuadro de búsqueda y escribe prueba».

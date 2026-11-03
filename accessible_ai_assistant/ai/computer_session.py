@@ -38,8 +38,11 @@ class ComputerSession:
         for turn in range(self.max_turns):
             self._check(started)
             self.status(f"Luna está revisando la ventana. Paso {turn + 1} de {self.max_turns}.")
+            reasoning = self.provider.reasoning_for(task, "computer", recent, escalate=turn >= 4)
             response = self.provider.client.responses.create(
                 model=self.provider.model, tools=[{"type": "computer"}],
+                reasoning=reasoning,
+                timeout=60.0 if reasoning["effort"] == "high" else 30.0,
                 instructions=INSTRUCTIONS, input=history, store=False,
                 include=["reasoning.encrypted_content"],
             )
