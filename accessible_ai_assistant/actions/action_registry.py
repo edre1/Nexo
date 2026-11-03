@@ -22,7 +22,7 @@ CATALOG: dict[str, ActionSpec] = {
     "get_active_window": ActionSpec(Level.SAFE),
     "list_visible_controls": ActionSpec(Level.SAFE),
     "focus_control": ActionSpec(Level.SAFE, frozenset({"name"})),
-    "move_cursor": ActionSpec(Level.SAFE, frozenset({"direction"}), frozenset({"count"})),
+    "computer_control": ActionSpec(Level.CONFIRM),
     "click_control": ActionSpec(Level.CONFIRM, frozenset({"name"})),
     "write_text": ActionSpec(Level.CONFIRM, frozenset({"text"})),
     "press_key": ActionSpec(Level.CONFIRM, frozenset({"key"})),
@@ -48,11 +48,6 @@ ALLOWED_KEYS = {
     "CTRL+S", "CTRL+Z", "CTRL+Y", "CTRL+C", "CTRL+V", "CTRL+A",
     "ENTER", "TAB", "SHIFT+TAB", "ESC", "UP", "DOWN", "LEFT", "RIGHT",
     "HOME", "END", "BACKSPACE", "DELETE", "F2", "F5",
-}
-
-CURSOR_DIRECTIONS = {
-    "left", "right", "up", "down", "home", "end",
-    "document_start", "document_end",
 }
 
 # Clicks are intentionally limited to navigation controls. Other operations

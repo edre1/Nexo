@@ -126,25 +126,6 @@ class WindowsController:
         send_keys(KEYS[normalized], pause=0.03)
         return f"Tecla {normalized} presionada."
 
-    def move_cursor(self, hwnd: int, direction: str, count: int = 1) -> str:
-        self._restore_target(hwnd)
-        keys = {
-            "left": "{LEFT}", "right": "{RIGHT}", "up": "{UP}", "down": "{DOWN}",
-            "home": "{HOME}", "end": "{END}",
-            "document_start": "^{HOME}", "document_end": "^{END}",
-        }
-        sequence = keys[direction]
-        send_keys(sequence * count, pause=0.05)
-        descriptions = {
-            "left": "a la izquierda", "right": "a la derecha",
-            "up": "hacia arriba", "down": "hacia abajo",
-            "home": "al inicio de la línea", "end": "al final de la línea",
-            "document_start": "al inicio del documento", "document_end": "al final del documento",
-        }
-        if direction in {"home", "end", "document_start", "document_end"}:
-            return f"Moví el cursor {descriptions[direction]}."
-        return f"Moví el cursor {count} {'posición' if count == 1 else 'posiciones'} {descriptions[direction]}."
-
     def save_file(self, hwnd: int) -> str:
         self._restore_target(hwnd)
         send_keys("^s")

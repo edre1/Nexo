@@ -1,5 +1,6 @@
 """Accessible Windows assistant entry point."""
 import sys
+import ctypes
 import tkinter as tk
 import win32con
 import win32gui
@@ -22,6 +23,8 @@ def main() -> int:
     if sys.platform != "win32":
         print("Esta primera versión requiere Windows.")
         return 1
+    # Keep window rectangles, screenshots and mouse coordinates in physical pixels.
+    ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
     settings = load_settings()
     logger = setup_logger()
     root = tk.Tk()

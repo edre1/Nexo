@@ -3,6 +3,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 from config.settings import load_settings
+from actions.action_models import AIReply
+from actions.action_registry import Level
+from assistant_service import Prepared
+from security.security_manager import Decision
 from ui.main_window import MainWindow
 
 
@@ -45,6 +49,19 @@ class ChatUITests(unittest.TestCase):
         self.window._append_message("assistant", "Mi respuesta")
         self.window._read_message(-1)
         self.speech.speak.assert_called_with("Tú: Mi pregunta")
+
+    def test_blocked_visual_request_never_constructs_driver(self):
+        self.window.selected = "openai"
+        prepared = Prepared(AIReply(type="action", action="computer_control", spoken_response="Revisaré."), Decision(Level.BLOCKED, "Bloqueado"), 42)
+        self.window.service.execute.return_value = "Bloqueado"
+        with patch("ui.main_window.ComputerDriver") as driver:
+            self.window._execute(prepared, "Haz clic")
+        driver.assert_not_called()
+
+    def test_cancel_hotkey_sets_event_without_waiting_for_ui_dialog(self):
+        with patch.object(self.window, "_target", return_value=42):
+            self.window._hotkey_event("cancel")
+        self.assertTrue(self.window.cancel_event.is_set())
 
 
 if __name__ == "__main__":

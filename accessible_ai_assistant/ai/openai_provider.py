@@ -15,8 +15,6 @@ class ActionParameters(BaseModel):
     name: str
     text: str
     key: str
-    direction: str
-    count: str
 
 
 class StructuredReply(BaseModel):
@@ -41,6 +39,13 @@ class OpenAIProvider(AIProvider):
             instructions=action_instructions(learning_mode) + (
                 " Devuelve todos los campos de parameters como cadenas vacías salvo los necesarios "
                 "para la acción elegida. Si respondes sin acción, action debe ser null."
+                " Para mover el ratón, hacer clic, escribir, pulsar teclas, desplazar, arrastrar "
+                "o hacer tareas de varios pasos en la ventana actual, elige computer_control. "
+                "No uses click_control, focus_control, write_text ni press_key para esas tareas; "
+                "la sesión visual las resolverá con la herramienta computer. "
+                "Para preguntas sobre la pantalla conserva get_screen_description. "
+                "Para abrir programas de la lista conserva open_application. "
+                "En modo aprendizaje, explica y pide permiso antes de escribir código educativo."
             ),
             input=f"Contexto accesible actual: {context}\nDiálogo reciente: {recent}\nPetición: {utterance}",
             text_format=StructuredReply,

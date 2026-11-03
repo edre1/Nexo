@@ -21,6 +21,8 @@ from speech.recognizer import ProviderSpeechRecognizer, microphone_status
 from updates import check_latest, release_settings
 from windows.hotkeys import GlobalHotkeys
 from windows.ui_automation import UIAutomation
+from windows.computer_driver import ComputerDriver
+from ai.computer_session import ComputerSession
 
 
 class MainWindow:
@@ -313,7 +315,7 @@ class MainWindow:
         name = "Gemini" if self.selected == "gemini" else "GPT-6 Luna" if self.selected == "openai" else "Ninguno"
         self.provider_status.set(
             f"Activo: {name}. Gemini: {'configurado' if 'gemini' in self.providers else 'sin clave'}. "
-            f"GPT-6 Luna: {'configurado' if 'openai' in self.providers else 'sin clave'}."
+            f"GPT-6 Luna: {'configurado · control visual disponible' if 'openai' in self.providers else 'sin clave'}."
         )
 
     def _select_provider(self, _event=None):
@@ -338,6 +340,8 @@ class MainWindow:
         self.root.after(500, self._track_target)
 
     def _hotkey_event(self, event: str):
+        if event == "cancel":
+            self.cancel_event.set()
         target = self._target()
         self.events.put((event, target))
 
@@ -413,12 +417,37 @@ class MainWindow:
             if self.cancel_event.is_set():
                 self.events.put(("done",))
                 return
-            result = self.service.execute(prepared, utterance)
+            if prepared.decision and prepared.decision.level == Level.BLOCKED:
+                result = self.service.execute(prepared, utterance)
+            elif prepared.reply.action == "computer_control":
+                if self.selected != "openai":
+                    raise ValueError("El control visual está disponible al seleccionar GPT-6 Luna.")
+                if not self.settings.enable_screen_vision:
+                    raise ValueError("Activa la visión de pantalla para usar el control visual.")
+                driver = ComputerDriver(prepared.target_hwnd, self.own_hwnd, self.cancel_event)
+                session = ComputerSession(self.service.provider, driver, self.cancel_event, self._confirm_visual, lambda text: self.events.put(("status", text)))
+                recent = "\n".join(f"Usuario: {u}\nNexo: {a}" for u, a in self.service.history[-3:])
+                result = session.run(utterance, recent)
+                self.service.history.append((utterance, result))
+                self.service.history = self.service.history[-3:]
+            else:
+                result = self.service.execute(prepared, utterance)
             if not self.cancel_event.is_set():
                 self.events.put(("result", result, prepared.reply.action or "respuesta"))
+        except InterruptedError:
+            self.events.put(("result", "Control visual cancelado.", "cancelada"))
         except Exception as exc:
             self.logger.error("Error al ejecutar %s: %s", prepared.reply.action, type(exc).__name__)
             self.events.put(("error", self._friendly_error(exc)))
+
+    def _confirm_visual(self, text):
+        answer = {"accepted": False}
+        ready = threading.Event()
+        self.events.put(("visual_confirm", text, answer, ready))
+        while not ready.wait(0.1):
+            if self.cancel_event.is_set() or self.closed.is_set():
+                return False
+        return answer["accepted"] and not self.cancel_event.is_set()
 
     @staticmethod
     def _friendly_error(exc: Exception) -> str:
@@ -470,6 +499,14 @@ class MainWindow:
                 elif kind == "transcript":
                     self._append_message("user", event[1])
                     self.command_entry.delete(0, "end")
+                elif kind == "visual_confirm":
+                    text, answer, ready = event[1:]
+                    try:
+                        if not self.cancel_event.is_set():
+                            self.speech.speak(text)
+                            answer["accepted"] = messagebox.askyesno("Confirmar control visual de Luna", text, parent=self.root)
+                    finally:
+                        ready.set()
                 elif kind == "confirm":
                     prepared, utterance = event[1], event[2]
                     if self.cancel_event.is_set():
@@ -477,7 +514,9 @@ class MainWindow:
                         continue
                     action = prepared.reply.action
                     detail = prepared.reply.parameters.get("text", "")[:120] if action == "write_text" else ""
-                    if action == "click_control":
+                    if action == "computer_control":
+                        prompt = "¿Permites a Luna iniciar el control visual de la ventana elegida? Se enviarán capturas de esa ventana a OpenAI. Confirmarás los clics, la escritura y las teclas antes de ejecutarlos. Para detenerlo usa el atajo de cancelar."
+                    elif action == "click_control":
                         prompt = f"¿Confirmas activar el control {prepared.reply.parameters['name']} en la ventana de destino?"
                     elif action == "close_application":
                         prompt = "¿Confirmas cerrar la ventana de destino? Podría haber cambios sin guardar."
@@ -512,6 +551,8 @@ class MainWindow:
             self._execute(prepared, utterance)
         finally:
             pythoncom.CoUninitialize()
+            if self.cancel_event.is_set():
+                self.events.put(("done",))
 
     def _finish(self, result: str, label: str):
         self.status.set(result if label == "error" else "Listo.")

@@ -11,10 +11,10 @@ REPLY_SCHEMA = {
     "type": "OBJECT",
     "properties": {
         "type": {"type": "STRING", "enum": ["action", "response"]},
-        "action": {"type": "STRING", "enum": list(CATALOG)},
+        "action": {"type": "STRING", "enum": [name for name in CATALOG if name != "computer_control"]},
         "parameters": {
             "type": "OBJECT",
-            "properties": {key: {"type": "STRING"} for key in ("application", "name", "text", "key", "direction", "count")},
+            "properties": {key: {"type": "STRING"} for key in ("application", "name", "text", "key")},
         },
         "spoken_response": {"type": "STRING"},
     },
@@ -35,7 +35,7 @@ class GeminiProvider(AIProvider):
             model=self.model,
             contents=f"Contexto accesible actual: {context}\nDiálogo reciente: {recent}\nPetición: {utterance}",
             config=types.GenerateContentConfig(
-                system_instruction=action_instructions(learning_mode),
+                system_instruction=action_instructions(learning_mode) + " El proveedor actual es Gemini: computer_control no está disponible. Si te piden mover el ratón o una tarea visual fuera del catálogo, responde que seleccionen GPT-6 Luna para usar el control visual.",
                 response_mime_type="application/json",
                 response_schema=REPLY_SCHEMA,
                 temperature=0,

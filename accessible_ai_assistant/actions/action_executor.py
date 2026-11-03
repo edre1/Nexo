@@ -36,8 +36,6 @@ class ActionExecutor:
         if action == "focus_control":
             name = self.accessibility.focus_element(target_hwnd, args["name"])
             return f"Foco colocado en {name}."
-        if action == "move_cursor":
-            return self.controller.move_cursor(target_hwnd, args["direction"].strip().lower(), int(args.get("count", "1")))
         if action == "click_control":
             self.controller.activate_target(target_hwnd)
             name = self.accessibility.click_navigation_control(target_hwnd, args["name"])

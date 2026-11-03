@@ -14,7 +14,7 @@ class OpenAIProviderTests(unittest.TestCase):
         provider.client = Mock()
         provider.client.responses.parse.return_value = SimpleNamespace(output_parsed=StructuredReply(
             type="action", action="open_application",
-            parameters=ActionParameters(application="notepad", name="", text="", key="", direction="", count=""),
+            parameters=ActionParameters(application="notepad", name="", text="", key=""),
             spoken_response="Abriré el Bloc de notas.",
         ))
         reply = provider.interpret("Abre Bloc de notas", "Escritorio", [], True)

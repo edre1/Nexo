@@ -1,5 +1,19 @@
 # Asistente accesible de Windows — primera versión
 
+## Control visual de Luna en pruebas
+
+Selecciona **GPT-6 Luna**, activa primero la ventana que quieres manejar y utiliza el atajo de voz. También puedes volver a Nexo y escribir una petición sobre la última ventana activa. Prueba con «Mueve el puntero al centro de la ventana» o «Haz clic en el cuadro de búsqueda y escribe prueba».
+
+Luna usa la herramienta nativa `computer` de OpenAI. Nexo envía una captura de la ventana elegida, valida las acciones devueltas, las ejecuta y devuelve una nueva captura. El ratón usa coordenadas relativas a esa captura sin reducir la imagen. Un círculo magenta en las capturas representa la posición del puntero. No se ejecuta código generado por la IA.
+
+Confirma el inicio de la sesión y luego cada clic, escritura, combinación de teclas o arrastre. **Ctrl+Alt+Escape** detiene la sesión; el botón Detener y Escape también cancelan cuando Nexo tiene el foco. La confirmación de cambios permanece obligatoria en el control visual. El movimiento del puntero, las capturas y el desplazamiento vertical no piden una confirmación adicional.
+
+Esta primera integración controla una ventana de Bloc de notas, Word, Chrome, Edge, VS Code, Explorador o Calculadora. Si cambia el foco a otra aplicación, aparece una ventana distinta o se mueve/redimensiona la ventana, se detiene para evitar usar coordenadas desactualizadas. Para continuar, activa el destino correcto y pide una tarea nueva. Se admiten desplazamientos verticales. Hay límites de 12 respuestas, 40 acciones y 3 minutos por tarea; una petición API en curso puede tardar unos segundos en devolver el control tras cancelar.
+
+Las capturas se envían a OpenAI durante la sesión y cuentan para el uso de la API. Las páginas, documentos y diálogos pueden contener instrucciones engañosas; deben tratarse como información y revisarse antes de aprobar cambios. Las operaciones de envío, compra, instalación y borrado quedan fuera de esta prueba; algunos controles se bloquean según su nombre accesible. La identificación visual puede equivocarse: revisa la acción que confirmas.
+
+Se retiró la antigua acción `move_cursor` del catálogo, de los esquemas y del controlador de Windows. Gemini conserva sus acciones fijas, sin movimiento de cursor. El nuevo control visual se utiliza con Luna y permite manejar tanto el puntero como el teclado.
+
 ## Reconocimiento y voz
 
 Nexo transcribe con la API del proveedor seleccionado: Gemini o `gpt-transcribe` de OpenAI. Whisper se retiró de la aplicación. Piper conserva la voz local **Claude high en español de México**, con la voz de Windows como alternativa.
@@ -66,7 +80,7 @@ Para probar sin micrófono, escribe la misma petición en la caja de texto y pul
 
 Lectura y navegación: ventana activa, controles visibles, foco actual, texto seleccionado, descripción de pantalla y enfoque de un control por nombre accesible. Apertura de aplicaciones: Bloc de notas, Chrome, Visual Studio Code, Edge, Explorador y Calculadora, si están instaladas. Volumen: subir, bajar y silenciar.
 
-También puedes decir «Mueve el cursor tres posiciones a la izquierda», «Ve al inicio del documento» o «Haz clic en Archivo». El movimiento usa teclas de navegación, hasta 20 pasos por petición. Los clics se hacen por nombre accesible mediante UI Automation y están limitados a controles de navegación comunes. No hay clics por coordenadas ni clics genéricos en botones como «Eliminar», «Enviar» o «Aceptar». Si necesitas otro control, se debe agregar como acción explícita con su regla de seguridad.
+Con Gemini, los clics fijos se hacen por nombre accesible mediante UI Automation y están limitados a controles de navegación comunes. Con Luna, las peticiones de ratón y teclado se dirigen al control visual descrito arriba.
 
 Acciones que piden confirmación: escribir texto, presionar una tecla de la lista cerrada, activar un control de navegación, guardar y solicitar el cierre de la ventana. Las teclas y nombres de clic permitidos están en `actions/action_registry.py`. El diálogo de confirmación está en la aplicación, no lo decide Gemini.
 
@@ -75,7 +89,7 @@ Están bloqueadas las aplicaciones fuera de la lista, rutas proporcionadas por l
 ## Accesibilidad y límites actuales
 
 - Todos los controles de la interfaz tienen etiquetas de texto y se alcanzan con Tab. Se puede leer el resultado en la ventana si la voz se superpone a NVDA.
-- UI Automation depende de lo que cada programa exponga. Algunos editores y aplicaciones web tienen controles poco descriptivos. Esta versión no usa coordenadas del ratón.
+- UI Automation depende de lo que cada programa exponga. Algunos editores y aplicaciones web tienen controles poco descriptivos. El control visual de Luna puede usar coordenadas del ratón dentro de la ventana elegida.
 - Un atajo global puede estar ocupado por otra aplicación; el estado lo indica. Se puede cambiar en `config/config.json` a otra combinación `Ctrl+Alt+tecla`.
 - El modo de aprendizaje está activo: las solicitudes educativas de HTML, CSS y JavaScript deben recibir una explicación antes de escribir. La confirmación local se mantiene para cualquier escritura.
 - La grabación finaliza tras silencio o al máximo configurado. En habitaciones ruidosas puede no cortar bien. El umbral del micrófono es fijo en esta versión.

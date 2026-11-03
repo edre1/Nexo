@@ -29,10 +29,13 @@ class SecurityTests(unittest.TestCase):
     def test_terminal_input_blocked(self):
         self.assertEqual(self.guard.evaluate(self.action("write_text", {"text": "dir\n"}), "Windows Terminal").level, Level.BLOCKED)
 
-    def test_cursor_movement_is_bounded(self):
-        self.assertEqual(self.guard.evaluate(self.action("move_cursor", {"direction": "left", "count": "3"})).level, Level.SAFE)
-        self.assertEqual(self.guard.evaluate(self.action("move_cursor", {"direction": "left", "count": "500"})).level, Level.BLOCKED)
-        self.assertEqual(self.guard.evaluate(self.action("move_cursor", {"direction": "escape", "count": "1"})).level, Level.BLOCKED)
+    def test_old_cursor_action_is_removed(self):
+        with self.assertRaises(ValidationError):
+            self.action("move_cursor", {"direction": "left"})
+
+    def test_visual_session_requires_initial_confirmation(self):
+        self.assertEqual(self.guard.evaluate(self.action("computer_control")).level, Level.CONFIRM)
+        self.assertEqual(SecurityManager(False).evaluate(self.action("computer_control")).level, Level.CONFIRM)
 
     def test_click_uses_navigation_allowlist_and_confirmation(self):
         self.assertEqual(self.guard.evaluate(self.action("click_control", {"name": "Archivo"})).level, Level.CONFIRM)

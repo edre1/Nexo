@@ -8,7 +8,7 @@ ActionName = Literal[
     "list_visible_controls", "focus_control", "write_text", "press_key",
     "save_file", "get_screen_description", "get_current_focus",
     "read_selected_text", "volume_up", "volume_down", "mute_volume",
-    "move_cursor", "click_control",
+    "computer_control", "click_control",
 ]
 
 
