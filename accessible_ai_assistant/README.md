@@ -1,5 +1,19 @@
 # Asistente accesible de Windows — primera versión
 
+## Registro y envío de errores por correo
+
+El registro central guarda errores de interfaz, peticiones a la IA, acciones, voz, descargas, atajos y excepciones Python sin capturar de arranque o hilos. Conserva fecha, versión, tipo de error, estado HTTP cuando existe y nombres de módulos/funciones con números de línea. No guarda el mensaje original de las excepciones, argumentos, variables, conversaciones, audio, capturas, claves ni rutas personales. Los errores de validación indican el campo y el tipo de fallo sin conservar su contenido.
+
+Abre el menú superior **Configuración → Reportes de errores**. Indica destinatario, cuenta remitente, servidor SMTP y su contraseña de aplicación. En Gmail utiliza `smtp.gmail.com`, puerto `587` y una contraseña de aplicación permitida por tu cuenta; no se utiliza la contraseña normal de Google. Consulta la ayuda oficial: https://support.google.com/accounts/answer/185833?hl=es
+
+Pulsa **Enviar prueba** para comprobar la cuenta. Para enviar automáticamente, marca **Activar envío automático** y guarda. La aplicación comprueba la cola cada 30 segundos y envía como máximo un resumen por hora, con hasta 20 grupos por correo. Los errores repetidos se agrupan por ventanas de diez minutos y se cuenta cuántas veces ocurrieron. Si el correo falla, conserva los pendientes y reintenta con esperas progresivas; al recuperar internet permite reintentar de nuevo. **Enviar pendientes** permite un envío manual inmediato. Un fallo de conexión después de aceptar el correo puede ocasionar un duplicado.
+
+**Exportar** guarda un JSON técnico para revisarlo o compartirlo manualmente. Los reportes pendientes se conservan hasta que se envíen. Los ya enviados se conservan 90 días y se limpian al registrar nuevos eventos. La cola está en `error_reports/errors.sqlite3` dentro de la carpeta de datos de Nexo. Los cierres forzados por Windows, cortes de energía y fallos nativos que terminan el proceso pueden no producir un reporte Python; no se garantiza registrar todos los fallos posibles del sistema.
+
+La configuración local está en `error_reporting.json`; la contraseña se protege con DPAPI de Windows para el usuario y la computadora actuales. Configura el envío en la laptop donde quedará instalada la aplicación. En la versión instalable estos archivos viven en `%APPDATA%\AsistenteAccesibleWindows`, y se conservan al actualizar. La credencial del correo, su dirección y los reportes no se incluyen en Git ni en el ZIP de pruebas. Al copiar manualmente una carpeta de pruebas, excluye `.env`, `preferences.json`, `error_reporting.json` y `error_reports`.
+
+El envío permanece desactivado hasta configurar una credencial válida y activarlo. Estos cambios aún son de pruebas y no están en el instalador publicado 1.0.0.
+
 ## Razonamiento automático de Luna
 
 Nexo elige y envía explícitamente `reasoning.effort` en cada consulta a GPT-6 Luna. Usa **bajo** para órdenes breves como «Abre la calculadora», **medio** para consultas generales y **alto** para análisis, comparación o tareas con varios pasos. La elección usa reglas locales: no añade una consulta extra a la API. Es una estimación del tipo de petición, no una medición exacta de su dificultad; en casos dudosos usa medio.

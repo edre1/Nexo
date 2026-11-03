@@ -2,6 +2,7 @@
 from abc import ABC, abstractmethod
 from queue import Empty, Queue
 import threading
+import logging
 
 
 class SpeechOutput(ABC):
@@ -42,12 +43,14 @@ class WindowsSpeechOutput(SpeechOutput):
                 try:
                     voice.Speak(text)
                 except Exception:
+                    logging.getLogger("accessible_assistant").error("windows_speech_failed", exc_info=True)
                     self.error = "La voz de Windows no está disponible."
                 finally:
                     if done:
                         done.set()
             del voice
         except Exception:
+            logging.getLogger("accessible_assistant").error("windows_speech_init_failed", exc_info=True)
             self.error = "La voz de Windows no está disponible."
             self.ready.set()
         finally:

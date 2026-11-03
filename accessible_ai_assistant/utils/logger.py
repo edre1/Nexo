@@ -4,17 +4,34 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import re
 from config.paths import DATA_ROOT
+from utils.error_reporting import ErrorReportHandler, get_reporter
+
+
+class SafeFormatter(logging.Formatter):
+    def format(self, record):
+        if record.levelno >= logging.ERROR or record.exc_info:
+            error_type = record.exc_info[0].__name__ if record.exc_info else "ApplicationError"
+            return f"{self.formatTime(record)} {record.levelname} {record.module}:{record.funcName} {error_type}"
+        return super().format(record)
 
 
 def setup_logger() -> logging.Logger:
-    folder = DATA_ROOT / "logs"
-    folder.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger("accessible_assistant")
     logger.setLevel(logging.INFO)
+    logger.propagate = False
     if not logger.handlers:
-        handler = RotatingFileHandler(folder / "assistant.log", maxBytes=1_000_000, backupCount=2, encoding="utf-8")
-        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        try:
+            folder = DATA_ROOT / "logs"
+            folder.mkdir(parents=True, exist_ok=True)
+            handler = RotatingFileHandler(folder / "assistant.log", maxBytes=1_000_000, backupCount=2, encoding="utf-8")
+        except OSError:
+            handler = logging.StreamHandler()
+        handler.setFormatter(SafeFormatter("%(asctime)s %(levelname)s %(message)s"))
         logger.addHandler(handler)
+        try:
+            logger.addHandler(ErrorReportHandler(get_reporter()))
+        except Exception:
+            logger.warning("El registro detallado de errores no está disponible.")
     return logger
 
 

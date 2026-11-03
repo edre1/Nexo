@@ -4,6 +4,7 @@ from queue import Queue
 import threading
 import wave
 import winsound
+import logging
 
 from speech.local_models import PIPER
 from speech.output import WindowsSpeechOutput
@@ -40,6 +41,7 @@ class LocalSpeechOutput:
                         winsound.PlaySound(audio.getvalue(), winsound.SND_MEMORY)
                         continue
                     except Exception:
+                        logging.getLogger("accessible_assistant").error("piper_synthesis_failed", exc_info=True)
                         self.engine = "windows"
                         warning = "Piper no está disponible. Usaré la voz de Windows. Puedes descargar los modelos en Configuración."
                         self.fallback.speak(warning)
@@ -47,6 +49,7 @@ class LocalSpeechOutput:
                             self.on_error(warning)
                 self.fallback.speak_and_wait(text, timeout=120)
             except Exception:
+                logging.getLogger("accessible_assistant").error("speech_playback_failed", exc_info=True)
                 if self.on_error and not self.closed:
                     self.on_error("No pude reproducir la voz. Revisa la salida de audio de Windows.")
             finally:

@@ -2,6 +2,7 @@
 import ctypes
 from ctypes import wintypes
 import threading
+import logging
 
 
 MOD_ALT = 0x0001
@@ -63,6 +64,7 @@ class GlobalHotkeys:
                 if msg.message == WM_HOTKEY:
                     self.callback("listen" if msg.wParam == 1 else "cancel")
         except Exception as exc:
+            logging.getLogger("accessible_assistant").error("global_hotkey_failed", exc_info=True)
             self.error = str(exc)
             self.ready.set()
         finally:

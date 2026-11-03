@@ -4,6 +4,7 @@ from dataclasses import replace
 import threading
 import webbrowser
 import os
+import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
 import win32con
@@ -27,7 +28,7 @@ from ai.computer_session import ComputerSession
 
 
 class MainWindow:
-    def __init__(self, root: tk.Tk, settings: Settings, service: AssistantService, speech: WindowsSpeechOutput, recognizer: ProviderSpeechRecognizer, accessibility: UIAutomation, logger, providers: dict, selected: str | None):
+    def __init__(self, root: tk.Tk, settings: Settings, service: AssistantService, speech: WindowsSpeechOutput, recognizer: ProviderSpeechRecognizer, accessibility: UIAutomation, logger, providers: dict, selected: str | None, reporter=None):
         self.root = root
         self.settings = settings
         self.service = service
@@ -37,6 +38,7 @@ class MainWindow:
         self.logger = logger
         self.providers = providers
         self.selected = selected
+        self.reporter = reporter
         self.online = None
         self.closed = threading.Event()
         self.messages = []
@@ -56,11 +58,10 @@ class MainWindow:
             self.status.set(f"Listo. Atajo para escuchar: {settings.hotkey_listen}.")
         except Exception as exc:
             self._announce_error(str(exc))
-            self.logger.error("Fallo de atajo global: %s", type(exc).__name__)
         self.root.after(100, self._drain)
         self.root.after(500, self._track_target)
         self.root.protocol("WM_DELETE_WINDOW", self._close)
-        self.root.report_callback_exception = lambda _kind, exc, _tb: self._announce_error(self._friendly_error(exc))
+        self.root.report_callback_exception = self._callback_error
         threading.Thread(target=self._monitor_connection, daemon=True).start()
 
     def _build(self):
@@ -73,6 +74,7 @@ class MainWindow:
         options = tk.Menu(menu, tearoff=False)
         options.add_command(label="Configurar atajo…", accelerator="Ctrl+,", command=self._settings_dialog)
         options.add_command(label="Buscar actualizaciones", command=self._check_updates)
+        options.add_command(label="Reportes de errores…", command=self._reporting_dialog)
         menu.add_cascade(label="Configuración", underline=0, menu=options)
         self.root.config(menu=menu)
         ttk.Label(body, text="Nexo", font=("Segoe UI", 22, "bold")).pack(anchor="w")
@@ -177,10 +179,21 @@ class MainWindow:
             self.speech.speak(text)
         return "break"
 
-    def _announce_error(self, text):
+    def _announce_error(self, text, record=True):
+        if record:
+            self.logger.error("interface_error", exc_info=bool(sys.exc_info()[0]))
         self.status.set(text)
         self._append_message("error", text)
         self.speech.speak(text)
+
+    def _callback_error(self, kind, exc, tb):
+        self.logger.error("interface_callback_failed", exc_info=(kind, exc, tb))
+        self._announce_error(self._friendly_error(exc), record=False)
+
+    def _reporting_dialog(self):
+        from ui.reporting_dialog import reporting_dialog
+        from utils.error_reporting import get_reporter
+        reporting_dialog(self.root, self.reporter or get_reporter(), lambda text, error=False: self.events.put(("diagnostics_notice", text, error)))
 
     def _sync_controls(self):
         allowed = bool(self.online) and not self.busy
@@ -204,6 +217,10 @@ class MainWindow:
         if previous != connected and (not connected or previous is False):
             self._append_message("assistant", text)
             self.speech.speak(text)
+            if not connected:
+                self.logger.error("connection_lost")
+            elif self.reporter:
+                self.reporter.retry_soon()
 
     def _can_send(self):
         if self.busy:
@@ -297,6 +314,7 @@ class MainWindow:
                 download_models(lambda text: self.events.put(("status", text)))
                 self.events.put(("models_ready",))
             except Exception:
+                self.logger.error("model_download_failed", exc_info=True)
                 self.events.put(("models_error",))
         threading.Thread(target=work, daemon=True).start()
 
@@ -314,6 +332,7 @@ class MainWindow:
             try:
                 self.events.put(("update", check_latest()))
             except Exception as exc:
+                self.logger.error("update_check_failed", exc_info=True)
                 self.events.put(("update_error", str(exc)))
         threading.Thread(target=work, daemon=True).start()
 
@@ -396,10 +415,12 @@ class MainWindow:
                 title = win32gui.GetWindowText(target) if target and win32gui.IsWindow(target) else ""
                 context = f"Ventana de destino: {title or 'no identificada'}"
             except Exception:
+                self.logger.warning("target_context_unavailable", exc_info=True)
                 context = "Ventana de destino no identificada"
             try:
                 focus = self.accessibility.focused_element() if target else ""
             except Exception:
+                self.logger.warning("focus_unavailable", exc_info=True)
                 focus = ""
             prepared = self.service.prepare(utterance, context, target, focus)
             if self.cancel_event.is_set():
@@ -412,7 +433,7 @@ class MainWindow:
         except InterruptedError:
             self.events.put(("status", "Escucha cancelada."))
         except Exception as exc:
-            self.logger.error("Error en flujo: %s", type(exc).__name__)
+            self.logger.error("request_failed", exc_info=True)
             self.events.put(("error", self._friendly_error(exc)))
         finally:
             pythoncom.CoUninitialize()
@@ -444,7 +465,7 @@ class MainWindow:
         except InterruptedError:
             self.events.put(("result", "Control visual cancelado.", "cancelada"))
         except Exception as exc:
-            self.logger.error("Error al ejecutar %s: %s", prepared.reply.action, type(exc).__name__)
+            self.logger.error("action_failed", exc_info=True)
             self.events.put(("error", self._friendly_error(exc)))
 
     def _confirm_visual(self, text):
@@ -482,6 +503,12 @@ class MainWindow:
                     self._cancel()
                 elif kind == "status":
                     self.status.set(event[1])
+                elif kind == "diagnostics_notice":
+                    if event[2]:
+                        self._announce_error(event[1])
+                    else:
+                        self.status.set(event[1])
+                        self.speech.speak(event[1])
                 elif kind == "connection":
                     self._apply_connection(event[1])
                 elif kind == "reasoning":
@@ -583,4 +610,6 @@ class MainWindow:
         self.cancel_event.set()
         self.hotkeys.close()
         self.speech.close()
+        if self.reporter:
+            self.reporter.close()
         self.root.destroy()

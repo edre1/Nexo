@@ -1,5 +1,6 @@
 """Dispatch validated actions to fixed Windows capabilities."""
 import win32gui
+import logging
 from actions.action_models import AIReply
 from ai.base_provider import AIProvider
 from windows.screen_capture import capture_screen
@@ -61,12 +62,14 @@ class ActionExecutor:
                 focus = self.accessibility.focused_element()
                 context = f"Ventana: {title}. Foco: {focus}. Controles: " + "; ".join(controls)
             except Exception:
+                logging.getLogger("accessible_assistant").warning("accessibility_read_failed", exc_info=True)
                 context = f"Ventana: {title}."
             if not self.enable_vision:
                 return context
             try:
                 return self.provider.describe_image(capture_screen(), context, question)
             except Exception:
+                logging.getLogger("accessible_assistant").error("screen_analysis_failed", exc_info=True)
                 return context + " No pude analizar la captura visual."
         if action in {"volume_up", "volume_down", "mute_volume"}:
             return self.controller.volume(action)

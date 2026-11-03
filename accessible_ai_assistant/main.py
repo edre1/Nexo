@@ -1,5 +1,9 @@
 """Accessible Windows assistant entry point."""
 import sys
+from utils.error_reporting import install_exception_hooks
+
+# Install before importing optional libraries so startup failures are retained too.
+reporter = install_exception_hooks()
 import ctypes
 import tkinter as tk
 import win32con
@@ -25,8 +29,8 @@ def main() -> int:
         return 1
     # Keep window rectangles, screenshots and mouse coordinates in physical pixels.
     ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
-    settings = load_settings()
     logger = setup_logger()
+    settings = load_settings()
     root = tk.Tk()
     root.update_idletasks()
     providers = {}
@@ -53,8 +57,10 @@ def main() -> int:
     speech = LocalSpeechOutput(settings.speech_output)
     recognizer = ProviderSpeechRecognizer(provider)
     recognizer.engine = settings.speech_recognition
-    MainWindow(root, settings, service, speech, recognizer, accessibility, logger, providers, selected)
+    MainWindow(root, settings, service, speech, recognizer, accessibility, logger, providers, selected, reporter=reporter)
     root.mainloop()
+    if reporter:
+        reporter.close()
     return 0
 
 

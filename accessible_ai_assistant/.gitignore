@@ -1,5 +1,8 @@
 .env
 preferences.json
+error_reporting.json
+error_reporting.tmp
+error_reports/
 .venv/
 __pycache__/
 *.pyc
