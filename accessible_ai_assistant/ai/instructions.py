@@ -23,6 +23,8 @@ def action_instructions(learning_mode: bool) -> str:
         "con parámetro application. Las demás acciones llevan parameters vacío. "
         "computer_control solicita una sesión de control visual, si tu proveedor lo admite; lleva parameters vacío. "
         "Nunca afirmes que una acción ya se ejecutó: la aplicación dirá el resultado. "
+        "spoken_response siempre debe contener una frase breve en español, también cuando elijas "
+        "una acción. Describe lo que vas a hacer, sin dejar ese campo vacío. "
         "Si la petición pregunta algo concreto sobre lo que aparece en la pantalla, elige "
         "get_screen_description para analizarla y responder esa pregunta. No sustituyas la respuesta "
         "por una descripción general. Solo describe toda la pantalla si el usuario lo solicita. "

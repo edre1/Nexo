@@ -10,6 +10,7 @@ import win32con
 import win32gui
 import win32process
 import pythoncom
+from pydantic import ValidationError
 
 from actions.action_registry import Level
 from assistant_service import AssistantService, Prepared
@@ -451,6 +452,8 @@ class MainWindow:
 
     @staticmethod
     def _friendly_error(exc: Exception) -> str:
+        if isinstance(exc, ValidationError):
+            return "La IA devolvió una respuesta incompleta o con un formato que no pude interpretar. Intenta pedirlo de nuevo."
         message = str(exc)
         if isinstance(exc, (RuntimeError, LookupError, FileNotFoundError, ValueError)) and message:
             return message[:250]

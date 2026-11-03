@@ -1,5 +1,5 @@
 """Strict boundary for model output. Unknown actions or parameters are rejected."""
-from typing import Literal
+from typing import Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -18,6 +18,19 @@ class AIReply(BaseModel):
     action: ActionName | None = None
     parameters: dict[str, str] = Field(default_factory=dict)
     spoken_response: str = Field(min_length=1, max_length=700)
+
+    @model_validator(mode="before")
+    @classmethod
+    def fill_spoken_response(cls, data):
+        if isinstance(data, dict) and isinstance(data.get("spoken_response"), str):
+            data = dict(data)
+            data["spoken_response"] = data["spoken_response"].strip()
+            if not data["spoken_response"] and data.get("type") == "action" and data.get("action") in get_args(ActionName):
+                data["spoken_response"] = (
+                    "Voy a revisar la ventana para realizar tu petición."
+                    if data["action"] == "computer_control" else "Voy a realizar la acción solicitada."
+                )
+        return data
 
     @model_validator(mode="after")
     def valid_shape(self):

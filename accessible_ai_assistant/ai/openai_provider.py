@@ -1,8 +1,9 @@
 """OpenAI adapter. It returns data only; Windows actions remain locally validated."""
 import base64
+from typing import Literal
 
 from openai import OpenAI
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from actions.action_models import AIReply, ActionName
 from ai.base_provider import AIProvider
@@ -19,10 +20,15 @@ class ActionParameters(BaseModel):
 
 class StructuredReply(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    type: str
+    type: Literal["action", "response"]
     action: ActionName | None
     parameters: ActionParameters
-    spoken_response: str
+    spoken_response: str = Field(min_length=1, max_length=700)
+
+    @model_validator(mode="before")
+    @classmethod
+    def fill_spoken_response(cls, data):
+        return AIReply.fill_spoken_response(data)
 
 
 class OpenAIProvider(AIProvider):
