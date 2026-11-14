@@ -9,6 +9,7 @@ from actions.action_models import AIReply, ActionName
 from ai.base_provider import AIProvider
 from ai.instructions import action_instructions, screen_instructions
 from ai.reasoning_policy import choose_reasoning
+from utils.spoken_text import plain_spoken_text
 
 
 class ActionParameters(BaseModel):
@@ -63,9 +64,8 @@ class OpenAIProvider(AIProvider):
                 "No uses click_control, focus_control, write_text ni press_key para esas tareas; "
                 "la sesión visual las resolverá con la herramienta computer. "
                 "Para preguntas sobre la pantalla conserva get_screen_description. "
-                "Para abrir programas de la lista conserva open_application. "
-                "En modo aprendizaje, explica y pide permiso antes de escribir código educativo."
-            ),
+                "Para abrir programas de la lista conserva open_application."
+            ) + (" En modo aprendizaje, explica y pide permiso antes de escribir código educativo." if learning_mode else ""),
             input=f"Contexto accesible actual: {context}\nDiálogo reciente: {recent}\nPetición: {utterance}",
             text_format=StructuredReply,
             store=False,
@@ -105,4 +105,4 @@ class OpenAIProvider(AIProvider):
             ]}],
             store=False,
         )
-        return (response.output_text or "No pude describir la imagen.").strip()[:1200]
+        return plain_spoken_text(response.output_text or "")[:1200] or "No pude responder la pregunta sobre la pantalla."

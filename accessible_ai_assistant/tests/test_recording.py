@@ -60,3 +60,13 @@ class RecordingTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'No detecté voz'):
                 ProviderSpeechRecognizer(provider).listen(threading.Event(), 60, 'es-MX')
         provider.transcribe.assert_not_called()
+
+    def test_recording_finished_is_announced_before_transcription(self):
+        provider = Mock()
+        stream = Stream([1000] + [0] * 30)
+        def recorded():
+            provider.transcribe.assert_not_called()
+            self.assertEqual(len(stream.sizes), 31)
+        with patch("speech.recognizer.sd.RawInputStream", return_value=stream):
+            ProviderSpeechRecognizer(provider).listen(threading.Event(), 60, "es-MX", on_recorded=recorded)
+        provider.transcribe.assert_called_once()

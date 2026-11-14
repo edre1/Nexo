@@ -28,7 +28,9 @@ class AssistantService:
 
     def prepare(self, utterance: str, context: str, target_hwnd: int, focused_control: str = "") -> Prepared:
         self.logger.info("Reconocido: %s", safe_transcript(utterance))
-        reply = self.provider.interpret(utterance, context, self.history, self.learning_mode)
+        reply = self.provider.interpret(
+            utterance, context, self.history, self.learning_mode and self.security.require_confirmation,
+        )
         if reply.type == "response":
             self.history.append((utterance, reply.spoken_response))
             self.history = self.history[-3:]

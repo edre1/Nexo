@@ -4,6 +4,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from ai.computer_session import ComputerSession
+from ai.instructions import SPOKEN_STYLE
 from windows.computer_driver import ComputerDriver, normalized_keys
 
 
@@ -29,7 +30,7 @@ class ComputerTests(unittest.TestCase):
         return session, provider, driver
 
     def test_native_loop_returns_screenshot_and_finishes(self):
-        session, provider, driver = self.setup_session([response([{'type': 'type', 'text': 'Hola'}]), response()])
+        session, provider, driver = self.setup_session([response([{'type': 'type', 'text': 'Hola'}]), response(text='**Tarea terminada.**')])
         self.assertEqual(session.run('Escribe Hola'), 'Tarea terminada.')
         driver.execute.assert_called_once_with({'type': 'type', 'text': 'Hola'})
         self.assertEqual(driver.capture.call_count, 2)
@@ -37,6 +38,7 @@ class ComputerTests(unittest.TestCase):
         self.assertEqual(kwargs['tools'], [{'type': 'computer'}])
         self.assertEqual(kwargs['reasoning'], {'effort': 'medium'})
         self.assertEqual(kwargs['input'][-1]['type'], 'computer_call_output')
+        self.assertIn(SPOKEN_STYLE, kwargs['instructions'])
         self.assertFalse(kwargs['store'])
 
     def test_declining_confirmation_never_executes(self):
@@ -44,6 +46,16 @@ class ComputerTests(unittest.TestCase):
         with self.assertRaises(InterruptedError):
             session.run('Haz clic')
         driver.execute.assert_not_called()
+
+    def test_without_confirmation_visual_actions_are_validated_and_executed(self):
+        action = {'type': 'click', 'x': 10, 'y': 10}
+        session, provider, driver = self.setup_session([response([action]), response()])
+        session.confirm = None
+        session.run('Haz clic')
+        self.assertIn('sin confirmación', provider.client.responses.create.call_args.kwargs['instructions'])
+        driver.validate.assert_called_once_with(action)
+        driver.execute.assert_called_once_with(action)
+        driver.describe.assert_not_called()
 
     def test_cancellation_after_confirmation_still_prevents_execution(self):
         session, _, driver = self.setup_session([response([{'type': 'type', 'text': 'Hola'}])])
@@ -57,6 +69,7 @@ class ComputerTests(unittest.TestCase):
 
     def test_pending_safety_review_stops_execution(self):
         session, _, driver = self.setup_session([response([{'type': 'click', 'x': 1, 'y': 1}], safety=[{'id': 'review', 'message': 'Review'}])])
+        session.confirm = None
         with self.assertRaisesRegex(ValueError, 'revisión'):
             session.run('Haz clic')
         driver.execute.assert_not_called()

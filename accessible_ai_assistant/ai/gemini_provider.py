@@ -5,6 +5,7 @@ from actions.action_models import AIReply
 from actions.action_registry import CATALOG
 from ai.base_provider import AIProvider
 from ai.instructions import action_instructions, screen_instructions
+from utils.spoken_text import plain_spoken_text
 
 
 REPLY_SCHEMA = {
@@ -63,9 +64,9 @@ class GeminiProvider(AIProvider):
         response = self.client.models.generate_content(
             model=self.model,
             contents=[
-                f"{screen_instructions()}\nPregunta del usuario: {question}\nContexto de accesibilidad: {context}",
+                f"Pregunta del usuario: {question}\nContexto de accesibilidad: {context}",
                 types.Part.from_bytes(data=png_bytes, mime_type="image/png"),
             ],
-            config=types.GenerateContentConfig(temperature=0),
+            config=types.GenerateContentConfig(system_instruction=screen_instructions(), temperature=0),
         )
-        return (response.text or "No pude describir la imagen.").strip()[:1200]
+        return plain_spoken_text(response.text or "")[:1200] or "No pude responder la pregunta sobre la pantalla."

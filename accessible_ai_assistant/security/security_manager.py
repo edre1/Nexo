@@ -45,8 +45,6 @@ class SecurityManager:
             destination = f"{target_title} {focused_control}".casefold()
             if any(word in destination for word in ("powershell", "command prompt", "símbolo del sistema", "cmd.exe", "terminal", "consola")):
                 return Decision(Level.BLOCKED, DENIED)
-        if reply.action == "computer_control":
-            return Decision(Level.CONFIRM)
         if spec.level == Level.CONFIRM and self.require_confirmation:
             return Decision(Level.CONFIRM)
         return Decision(Level.SAFE)

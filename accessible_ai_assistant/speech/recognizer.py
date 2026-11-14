@@ -11,7 +11,7 @@ from ai.base_provider import AIProvider
 
 class SpeechRecognizer(ABC):
     @abstractmethod
-    def listen(self, cancel: threading.Event, seconds: int, language: str, on_ready=None) -> str:
+    def listen(self, cancel: threading.Event, seconds: int, language: str, on_ready=None, on_recorded=None) -> str:
         pass
 
 
@@ -20,7 +20,7 @@ class ProviderSpeechRecognizer(SpeechRecognizer):
     def __init__(self, provider: AIProvider):
         self.provider = provider
 
-    def listen(self, cancel: threading.Event, seconds: int, language: str, on_ready=None) -> str:
+    def listen(self, cancel: threading.Event, seconds: int, language: str, on_ready=None, on_recorded=None) -> str:
         rate = 16000
         block = 1600
         frames: list[bytes] = []
@@ -53,6 +53,8 @@ class ProviderSpeechRecognizer(SpeechRecognizer):
             raise RuntimeError("No pude acceder al micrófono. Revisa el dispositivo de entrada.") from exc
         if cancel.is_set():
             raise InterruptedError("Escucha cancelada.")
+        if on_recorded:
+            on_recorded()
         if not heard_voice:
             raise RuntimeError("No detecté voz. Inténtalo de nuevo.")
         output = BytesIO()

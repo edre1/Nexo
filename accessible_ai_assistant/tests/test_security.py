@@ -33,9 +33,12 @@ class SecurityTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             self.action("move_cursor", {"direction": "left"})
 
-    def test_visual_session_requires_initial_confirmation(self):
+    def test_visual_session_follows_confirmation_preference(self):
         self.assertEqual(self.guard.evaluate(self.action("computer_control")).level, Level.CONFIRM)
-        self.assertEqual(SecurityManager(False).evaluate(self.action("computer_control")).level, Level.CONFIRM)
+        guard = SecurityManager(False)
+        self.assertEqual(guard.evaluate(self.action("computer_control")).level, Level.SAFE)
+        self.assertEqual(guard.evaluate(self.action("write_text", {"text": "Hola"})).level, Level.SAFE)
+        self.assertEqual(guard.evaluate(self.action("press_key", {"key": "Win+R"})).level, Level.BLOCKED)
 
     def test_click_uses_navigation_allowlist_and_confirmation(self):
         self.assertEqual(self.guard.evaluate(self.action("click_control", {"name": "Archivo"})).level, Level.CONFIRM)

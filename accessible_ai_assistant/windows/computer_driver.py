@@ -11,7 +11,7 @@ import win32api
 import win32gui
 import win32process
 from pywinauto import Desktop, mouse
-from pywinauto.keyboard import send_keys
+from pywinauto.keyboard import CODES, send_keys
 
 from windows.windows_controller import WindowsController, KEYS, _escape_literal
 from windows.ui_automation import UIAutomation
@@ -20,24 +20,42 @@ APPS = {"notepad.exe", "chrome.exe", "msedge.exe", "code.exe", "winword.exe", "e
 KEY_MAP = {**KEYS, "CTRL+HOME": "^{HOME}", "CTRL+END": "^{END}", "CTRL+F": "^f", "CTRL+L": "^l", "CTRL+O": "^o", "CTRL+N": "^n", "CTRL+SHIFT+S": "^+s", "CTRL+TAB": "^{TAB}", "CTRL+SHIFT+TAB": "^+{TAB}", "PAGEDOWN": "{PGDN}", "PAGEUP": "{PGUP}", "ALT+LEFT": "%{LEFT}", "ALT+RIGHT": "%{RIGHT}"}
 KEY_MAP.pop("DELETE")
 DENIED_WORDS = ("eliminar", "delete", "borrar", "comprar", "purchase", "pagar", "checkout", "enviar", "send", "publicar", "publish", "instalar", "install", "ejecutar", "run", "terminal", "powershell", "contraseña", "password", "permisos", "permissions")
+KEY_ALIASES = {"CONTROL": "CTRL", "CONTROL_L": "CTRL", "CTRL_L": "CTRL", "ALT_L": "ALT", "SHIFT_L": "SHIFT", "ARROWLEFT": "LEFT", "ARROWRIGHT": "RIGHT", "ARROWUP": "UP", "ARROWDOWN": "DOWN", "ESCAPE": "ESC", "RETURN": "ENTER"}
 
 
 def normalized_keys(keys):
     if not isinstance(keys, list) or not 1 <= len(keys) <= 3 or not all(isinstance(k, str) for k in keys):
         raise ValueError("Combinación de teclas no válida.")
-    aliases = {"CONTROL": "CTRL", "CONTROL_L": "CTRL", "CTRL_L": "CTRL", "ALT_L": "ALT", "SHIFT_L": "SHIFT", "ARROWLEFT": "LEFT", "ARROWRIGHT": "RIGHT", "ARROWUP": "UP", "ARROWDOWN": "DOWN", "ESCAPE": "ESC", "RETURN": "ENTER"}
-    result = "+".join(aliases.get(k.upper(), k.upper()) for k in keys)
+    result = "+".join(KEY_ALIASES.get(k.upper(), k.upper()) for k in keys)
     if result not in KEY_MAP:
         raise ValueError("La combinación de teclas solicitada no está permitida.")
     return result
 
 
+def desktop_key_codes(keys):
+    if not isinstance(keys, list) or not keys or not all(isinstance(key, str) for key in keys):
+        raise ValueError("Combinación de teclas no válida.")
+    names = {"CTRL": "VK_CONTROL", "ALT": "VK_MENU", "SHIFT": "VK_SHIFT", "META": "LWIN", "SUPER": "LWIN", "WIN": "LWIN", "PAGEUP": "PGUP", "PAGEDOWN": "PGDN"}
+    codes = []
+    for key in keys:
+        key = KEY_ALIASES.get(key.upper(), key.upper())
+        code = ord(key) if len(key) == 1 and key.isascii() and key.isalnum() else CODES.get(names.get(key, key))
+        if code is None:
+            raise ValueError("Windows no reconoce una de las teclas solicitadas.")
+        codes.append(code)
+    return codes
+
+
 class ComputerDriver:
-    def __init__(self, target, own_hwnd, cancel):
+    desktop = False
+
+    def __init__(self, target, own_hwnd, cancel, *, desktop=False):
         self.target, self.own_hwnd, self.cancel = target, own_hwnd, cancel
+        self.desktop = desktop
         self.controller = WindowsController(own_hwnd)
         self.rect = None
-        self._check_process()
+        if not desktop:
+            self._check_process()
 
     def _check_process(self):
         if not self.target or not win32gui.IsWindow(self.target):
@@ -66,6 +84,8 @@ class ComputerDriver:
     def _activate(self):
         if self.cancel.is_set():
             raise InterruptedError("Control visual cancelado.")
+        if self.desktop:
+            return
         self._check_process()
         active = win32gui.GetForegroundWindow()
         if active and active != self.target and win32process.GetWindowThreadProcessId(active)[1] != os.getpid():
@@ -74,9 +94,10 @@ class ComputerDriver:
 
     def capture(self):
         self._activate()
-        rect = win32gui.GetWindowRect(self.target)
         with mss.mss() as screen:
             monitor = screen.monitors[0]
+            bounds = (monitor["left"], monitor["top"], monitor["left"] + monitor["width"], monitor["top"] + monitor["height"])
+            rect = bounds if self.desktop else win32gui.GetWindowRect(self.target)
             left, top = max(rect[0], monitor["left"]), max(rect[1], monitor["top"])
             right = min(rect[2], monitor["left"] + monitor["width"])
             bottom = min(rect[3], monitor["top"] + monitor["height"])
@@ -113,17 +134,17 @@ class ComputerDriver:
         kind = action["type"]
         if kind in {"click", "double_click", "move", "scroll"}:
             self._point(action)
-        if kind == "click" and action.get("button", "left") not in {"left", "right"}:
+        if kind == "click" and action.get("button", "left") not in ({"left", "right", "middle"} if self.desktop else {"left", "right"}):
             raise ValueError("Botón de ratón no permitido.")
         if kind == "keypress":
-            normalized_keys(action.get("keys"))
+            (desktop_key_codes if self.desktop else normalized_keys)(action.get("keys"))
         if kind == "type":
             text = action.get("text")
-            if not isinstance(text, str) or not 1 <= len(text) <= 2000 or any(word in text.casefold() for word in ("javascript:", "powershell", "cmd.exe", "cmd /", "mshta", "file://")):
+            if not isinstance(text, str) or not text or (not self.desktop and (len(text) > 2000 or any(word in text.casefold() for word in ("javascript:", "powershell", "cmd.exe", "cmd /", "mshta", "file://")))):
                 raise ValueError("Texto no permitido para control visual.")
         if kind == "scroll":
             amount = action.get("scroll_amount")
-            if action.get("scroll_direction") not in {"up", "down"} or type(amount) is not int or not 0 < amount <= 1200:
+            if action.get("scroll_direction") not in {"up", "down"} or type(amount) is not int or amount <= 0 or (not self.desktop and amount > 1200):
                 raise ValueError("Desplazamiento no permitido.")
         if kind == "drag":
             path = action.get("path")
@@ -151,22 +172,23 @@ class ComputerDriver:
 
     def execute(self, action):
         self._activate()
-        if win32gui.GetWindowRect(self.target) != self.window_rect:
-            raise ValueError("La ventana se movió o cambió de tamaño. Solicita una nueva tarea visual.")
         self.validate(action)
         kind = action["type"]
-        if kind in {"type", "keypress"}:
-            self._check_keyboard_focus()
-        points = action["path"] if kind == "drag" else [action] if kind in {"click", "double_click", "move", "scroll"} else []
-        for point in points:
-            if win32gui.GetAncestor(win32gui.WindowFromPoint(self._point(point)), 2) != self.target:
-                raise ValueError("Otra ventana cubre el punto solicitado. Detuve la acción del ratón.")
+        if not self.desktop:
+            if win32gui.GetWindowRect(self.target) != self.window_rect:
+                raise ValueError("La ventana se movió o cambió de tamaño. Solicita una nueva tarea visual.")
+            if kind in {"type", "keypress"}:
+                self._check_keyboard_focus()
+            points = action["path"] if kind == "drag" else [action] if kind in {"click", "double_click", "move", "scroll"} else []
+            for point in points:
+                if win32gui.GetAncestor(win32gui.WindowFromPoint(self._point(point)), 2) != self.target:
+                    raise ValueError("Otra ventana cubre el punto solicitado. Detuve la acción del ratón.")
         if kind in {"click", "double_click"}:
-            self.describe(action)  # Recheck the accessible control after confirmation.
             point = self._point(action)
-            actual = win32gui.GetAncestor(win32gui.WindowFromPoint(point), 2)
-            if actual != self.target:
-                raise ValueError("Otra ventana cubre el punto solicitado. Detuve el clic.")
+            if not self.desktop:
+                self.describe(action)  # Recheck the accessible control after confirmation.
+                if win32gui.GetAncestor(win32gui.WindowFromPoint(point), 2) != self.target:
+                    raise ValueError("Otra ventana cubre el punto solicitado. Detuve el clic.")
             if kind == "double_click":
                 mouse.double_click(coords=point)
             else:
@@ -174,9 +196,25 @@ class ComputerDriver:
         elif kind == "move":
             mouse.move(coords=self._point(action))
         elif kind == "type":
-            send_keys(_escape_literal(action["text"]), with_spaces=True, with_tabs=True, with_newlines=True, vk_packet=True, pause=0.01)
+            text = action["text"].replace("\r\n", "\n")
+            chunk_size = 128 if self.desktop else len(text)
+            for start in range(0, len(text), chunk_size):
+                if self.cancel.is_set():
+                    raise InterruptedError("Escritura cancelada.")
+                send_keys(_escape_literal(text[start:start + chunk_size]), with_spaces=True, with_tabs=True, with_newlines=True, vk_packet=True, pause=0.01)
         elif kind == "keypress":
-            send_keys(KEY_MAP[normalized_keys(action["keys"])], pause=0.03)
+            if self.desktop:
+                codes = desktop_key_codes(action["keys"])
+                pressed = []
+                try:
+                    for code in codes:
+                        win32api.keybd_event(code, 0, 0, 0)
+                        pressed.append(code)
+                finally:
+                    for code in reversed(pressed):
+                        win32api.keybd_event(code, 0, 2, 0)
+            else:
+                send_keys(KEY_MAP[normalized_keys(action["keys"])], pause=0.03)
         elif kind == "scroll":
             mouse.scroll(coords=self._point(action), wheel_dist=max(1, action["scroll_amount"] // 100) * (1 if action["scroll_direction"] == "up" else -1))
         elif kind == "drag":
@@ -188,7 +226,7 @@ class ComputerDriver:
                         raise InterruptedError("Arrastre cancelado.")
                     mouse.move(coords=point)
             finally:
-                mouse.release()
+                mouse.release(coords=win32gui.GetCursorPos())
         elif kind == "wait":
             if self.cancel.wait(0.5):
                 raise InterruptedError("Control visual cancelado.")

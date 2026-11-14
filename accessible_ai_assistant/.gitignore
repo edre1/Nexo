@@ -3,6 +3,7 @@ preferences.json
 error_reporting.json
 error_reporting.tmp
 error_reports/
+advanced_activity/
 .venv/
 __pycache__/
 *.pyc

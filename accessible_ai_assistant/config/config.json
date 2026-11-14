@@ -1,5 +1,5 @@
 {
-  "ai_provider": "gemini",
+  "ai_provider": "openai",
   "model": "gemini-3.5-flash-lite",
   "hotkey_listen": "Ctrl+Alt+A",
   "hotkey_cancel": "Ctrl+Alt+Escape",

@@ -25,7 +25,7 @@ def choose_reasoning(request, phase="interpret", recent="", escalate=False):
     if len(text.split()) <= 10 and re.search(r"\b(si|hazlo|continua|sigue|repite|igual|mismo|eso|ese|esa)\b", text) and recent:
         text += " " + normalize(recent[-4000:])
     if escalate:
-        return ReasoningChoice("high", "la tarea visual ha necesitado varios pasos")
+        return ReasoningChoice("high", "la tarea ha necesitado varios pasos")
     complex_terms = r"\b(analiz\w*|compar\w*|depur\w*|diagnostic\w*|resuelv\w*|resolver|razona\w*|demuestr\w*|justific\w*|optimiza\w*|investig\w*|corrige\w*|corregir|implementa\w*|desarrolla\w*|algoritmo\w*)\b"
     multiple_steps = re.search(r"\b(despues|luego|paso a paso|a continuacion|por ultimo|al terminar)\b", text)
     verbs = re.findall(r"\b(abre|busca|encuentra|selecciona|escribe|copia|pega|guarda|rellena|completa|pulsa|haz clic|mueve|lee|revisa)\b", text)

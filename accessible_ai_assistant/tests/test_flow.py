@@ -1,5 +1,6 @@
 import logging
 import unittest
+from unittest.mock import Mock
 
 from actions.action_models import AIReply
 from actions.action_registry import Level
@@ -22,6 +23,16 @@ class FakeExecutor:
 
 
 class FlowTests(unittest.TestCase):
+    def test_educational_requests_skip_extra_permission_when_disabled(self):
+        provider = Mock(wraps=FakeProvider())
+        guard = SecurityManager(require_confirmation=False)
+        service = AssistantService(provider, guard, FakeExecutor(), logging.getLogger("test"), True)
+        service.prepare("Escribe un ejemplo HTML", "Bloc de notas", 123)
+        self.assertFalse(provider.interpret.call_args.args[-1])
+        guard.require_confirmation = True
+        service.prepare("Escribe un ejemplo HTML", "Bloc de notas", 123)
+        self.assertTrue(provider.interpret.call_args.args[-1])
+
     def test_interpret_security_execute(self):
         executor = FakeExecutor()
         service = AssistantService(FakeProvider(), SecurityManager(), executor, logging.getLogger("test"), True)

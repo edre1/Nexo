@@ -36,7 +36,15 @@ Las capturas se envían a OpenAI durante la sesión y cuentan para el uso de la 
 
 Se retiró la antigua acción `move_cursor` del catálogo, de los esquemas y del controlador de Windows. Gemini conserva sus acciones fijas, sin movimiento de cursor. El nuevo control visual se utiliza con Luna y permite manejar tanto el puntero como el teclado.
 
+## Modo avanzado de Luna
+
+Con Luna seleccionado, abre Preferencias con Ctrl+, y marca **Activar modo avanzado de Luna**. Nexo recuerda la opción al reiniciar y solo la aplica con Luna. Ctrl+Alt+Escape detiene la sesión si conservas el atajo predeterminado.
+
+Abre **Configuración → Registro del modo avanzado** para consultar `advanced_activity/actividad.txt`. Registra comandos, acciones visuales, rutas conocidas y resultados. Las copias previas de archivos identificados de hasta 20 MiB quedan en `advanced_activity/copias`. El registro es local y puede contener datos de la tarea. Los efectos indirectos de un comando o clic y los cambios en servicios externos pueden quedar sin detectar y requerir corrección manual.
+
 ## Reconocimiento y voz
+
+En Preferencias puedes activar **Escuchar antes de enviar**. Nexo lee la transcripción en voz alta. Pulsa Enter para aceptarla, Escape para cancelar u otra tecla para volver a grabar. El envío automático ocurre tres segundos después de terminar la lectura.
 
 Nexo transcribe con la API del proveedor seleccionado: Gemini o `gpt-transcribe` de OpenAI. Whisper se retiró de la aplicación. Piper conserva la voz local **Claude high en español de México**, con la voz de Windows como alternativa.
 
@@ -54,6 +62,7 @@ La ventana muestra la conversación en burbujas y anuncia respuestas y errores c
 - Alt+M lleva al campo de mensaje; Alt+H lleva a la conversación; F6 alterna entre ambos.
 - Alt+Arriba y Alt+Abajo recorren los mensajes y los leen en voz alta. En la conversación también puedes seleccionar texto y copiar con Ctrl+C.
 - Ctrl+, abre Configuración. Selecciona la letra o número que acompañará a Ctrl+Alt para hablar y pulsa Guardar. Si el atajo está ocupado, se anuncia el error y se conserva el anterior.
+- Ctrl+Alt+F8 alterna entre Gemini para preguntas sencillas y Luna para peticiones complejas. Puedes cambiar esa combinación en Preferencias (Ctrl+,). Nexo anuncia el cambio en voz alta. Al abrir la aplicación, usa Luna si su clave está configurada.
 - El atajo se guarda en `preferences.json`, que es una preferencia local y no se publica.
 - Nexo comprueba la conexión al abrir, periódicamente y antes de iniciar una petición. Sin conexión desactiva Escuchar y Enviar, conserva el mensaje escrito y anuncia la desconexión una vez. Al recuperarse la conexión, vuelve a habilitar el envío y lo anuncia.
 
@@ -74,6 +83,8 @@ Los modelos de prueba son `gemini-3.5-flash-lite` y `gpt-6-luna`. La opción de 
 El reconocimiento de voz graba hasta 60 segundos, con corte tras 3 segundos de silencio, y envía el audio a Gemini o a `gpt-transcribe` de OpenAI. La descripción visual envía una captura al proveedor seleccionado cuando se pregunta por la pantalla. Las consultas a la IA dependen de internet y de los límites de cada cuenta. OpenAI API puede generar cargos por uso.
 
 ## Instalación y traslado a otra computadora
+
+El instalador ofrece **Iniciar Nexo en segundo plano al iniciar sesión en Windows**. Con esa opción marcada, los atajos globales funcionan desde otras aplicaciones sin abrir el chat. Para mostrarlo, abre Nexo desde el menú Inicio o el escritorio. Para ocultarlo de nuevo, usa **Configuración → Ocultar y seguir escuchando el atajo**.
 
 1. Extrae el ZIP o copia esta carpeta a la computadora donde lo usarás.
 2. Comprueba que Windows tenga Python 3.12 o 3.13 de 64 bits instalado. En esta computadora ya está instalado.

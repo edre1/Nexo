@@ -3,6 +3,7 @@ import win32gui
 import logging
 from actions.action_models import AIReply
 from ai.base_provider import AIProvider
+from ai.openai_errors import credits_exhausted
 from windows.screen_capture import capture_screen
 from windows.ui_automation import UIAutomation
 from windows.windows_controller import WindowsController
@@ -68,7 +69,9 @@ class ActionExecutor:
                 return context
             try:
                 return self.provider.describe_image(capture_screen(), context, question)
-            except Exception:
+            except Exception as exc:
+                if credits_exhausted(exc):
+                    raise
                 logging.getLogger("accessible_assistant").error("screen_analysis_failed", exc_info=True)
                 return context + " No pude analizar la captura visual."
         if action in {"volume_up", "volume_down", "mute_volume"}:
