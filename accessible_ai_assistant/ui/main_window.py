@@ -962,8 +962,15 @@ class MainWindow:
                         self.status.set("Acción cancelada.")
         except Empty:
             pass
-        self._install_pending_update()
-        self.root.after(100, self._drain)
+        except Exception as exc:
+            if not self.closed.is_set():
+                self.logger.error("event_dispatch_failed", exc_info=True)
+                self._finish(self._friendly_error(exc), "error")
+        finally:
+            if not self.closed.is_set():
+                self.root.after(100, self._drain)
+        if not self.closed.is_set():
+            self._install_pending_update()
 
     def _confirmed_worker(self, prepared: Prepared, utterance: str):
         pythoncom.CoInitialize()

@@ -7,9 +7,24 @@ import threading
 import wave
 import winsound
 import logging
+import sys
+from contextlib import ExitStack
 
 from speech.local_models import PIPER
 from speech.output import WindowsSpeechOutput
+from speech.audio_process import audio_process, receive_audio
+
+
+def piper_worker(connection, model):
+    from piper import PiperVoice
+
+    voice = PiperVoice.load(model, use_cuda=False)
+    while True:
+        text = connection.recv()
+        audio = BytesIO()
+        with wave.open(audio, "wb") as wav:
+            voice.synthesize_wav(text, wav)
+        connection.send(audio.getvalue())
 
 
 class LocalSpeechOutput:
@@ -25,6 +40,11 @@ class LocalSpeechOutput:
         self.thread.start()
 
     def _run(self):
+        with ExitStack() as processes:
+            self._speak_loop(processes)
+
+    def _speak_loop(self, processes):
+        piper = None
         while True:
             item = self.queue.get()
             if item is None:
@@ -35,14 +55,21 @@ class LocalSpeechOutput:
                     continue
                 if self.engine == "piper":
                     try:
-                        if self.voice is None:
-                            if not PIPER.exists():
-                                raise ValueError("Falta la voz de Piper. Descarga los modelos desde Configuración.")
-                            from piper import PiperVoice
-                            self.voice = PiperVoice.load(str(PIPER), use_cuda=False)
-                        audio = BytesIO()
-                        with wave.open(audio, "wb") as wav:
-                            self.voice.synthesize_wav(text, wav)
+                        if not PIPER.exists():
+                            raise ValueError("Falta la voz de Piper. Descarga los modelos desde Configuración.")
+                        if getattr(sys, "frozen", False):
+                            if piper is None:
+                                piper = processes.enter_context(audio_process(piper_worker, str(PIPER)))
+                            connection, process = piper
+                            connection.send(text)
+                            audio = BytesIO(receive_audio(connection, process, 45))
+                        else:
+                            if self.voice is None:
+                                from piper import PiperVoice
+                                self.voice = PiperVoice.load(str(PIPER), use_cuda=False)
+                            audio = BytesIO()
+                            with wave.open(audio, "wb") as wav:
+                                self.voice.synthesize_wav(text, wav)
                         if cancelled is None:
                             winsound.PlaySound(audio.getvalue(), winsound.SND_MEMORY)
                         elif not cancelled.is_set():
@@ -60,6 +87,8 @@ class LocalSpeechOutput:
                                         winsound.PlaySound(None, 0)
                         continue
                     except Exception:
+                        processes.close()
+                        piper = None
                         logging.getLogger("accessible_assistant").error("piper_synthesis_failed", exc_info=True)
                         self.engine = "windows"
                         warning = "Piper no está disponible. Usaré la voz de Windows. Puedes descargar los modelos en Configuración."

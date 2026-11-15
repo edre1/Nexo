@@ -1,5 +1,10 @@
 """Accessible Windows assistant entry point."""
 import sys
+import multiprocessing
+
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+
 from utils.error_reporting import install_exception_hooks
 
 # Install before importing optional libraries so startup failures are retained too.
