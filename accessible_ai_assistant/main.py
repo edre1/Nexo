@@ -84,6 +84,8 @@ def run_app(background, show_window) -> int:
     recognizer = ProviderSpeechRecognizer(provider)
     recognizer.engine = settings.speech_recognition
     MainWindow(root, settings, service, speech, recognizer, accessibility, logger, providers, selected, reporter=reporter)
+    if "--updated" in sys.argv[1:]:
+        speech.speak("Nexo se actualizó correctamente.")
 
     def check_show_window():
         if win32event.WaitForSingleObject(show_window, 0) == win32event.WAIT_OBJECT_0:

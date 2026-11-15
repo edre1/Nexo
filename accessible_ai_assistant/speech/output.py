@@ -17,7 +17,7 @@ class SpeechOutput(ABC):
 
 class WindowsSpeechOutput(SpeechOutput):
     def __init__(self):
-        self.queue: Queue[tuple[str, threading.Event | None] | None] = Queue()
+        self.queue: Queue[tuple[str, threading.Event | None, threading.Event | None] | None] = Queue()
         self.ready = threading.Event()
         self.error = ""
         self.thread = threading.Thread(target=self._run, daemon=True, name="WindowsSpeech")
@@ -39,9 +39,16 @@ class WindowsSpeechOutput(SpeechOutput):
                     continue
                 if item is None:
                     break
-                text, done = item
+                text, done, cancelled = item
                 try:
-                    voice.Speak(text)
+                    if cancelled is None:
+                        voice.Speak(text)
+                    elif not cancelled.is_set():
+                        voice.Speak(text, 1)
+                        while not voice.WaitUntilDone(40):
+                            if cancelled.is_set():
+                                voice.Speak("", 3)
+                                break
                 except Exception:
                     logging.getLogger("accessible_assistant").error("windows_speech_failed", exc_info=True)
                     self.error = "La voz de Windows no está disponible."
@@ -58,13 +65,13 @@ class WindowsSpeechOutput(SpeechOutput):
 
     def speak(self, text: str) -> None:
         if text and not self.error:
-            self.queue.put((text[:600], None))
+            self.queue.put((text[:600], None, None))
 
-    def speak_and_wait(self, text: str, timeout: float = 10) -> None:
+    def speak_and_wait(self, text: str, timeout: float = 10, cancelled=None) -> None:
         if self.error:
             raise RuntimeError(self.error)
         done = threading.Event()
-        self.queue.put((text[:600], done))
+        self.queue.put((text[:600], done, cancelled))
         if not done.wait(timeout) or self.error:
             raise RuntimeError("No pude reproducir la voz de Windows.")
 

@@ -76,7 +76,7 @@ class ChatUITests(unittest.TestCase):
         self.window._append_message("user", "Mi pregunta")
         self.window._append_message("assistant", "Mi respuesta")
         self.window._read_message(-1)
-        self.speech.speak.assert_called_with("Tú: Mi pregunta")
+        self.speech.interrupt_and_speak.assert_called_with("Tú: Mi pregunta")
 
     def test_conversation_history_is_read_only(self):
         self.window._append_message("assistant", "Mensaje original")

@@ -5,6 +5,7 @@ import threading
 import webbrowser
 import os
 import sys
+import subprocess
 import tkinter as tk
 from tkinter import messagebox, ttk
 import win32con
@@ -45,6 +46,8 @@ class MainWindow:
         self.advanced_mode = selected == "openai" and settings.advanced_mode
         self.processing_timer = None
         self.review_dialog = None
+        self.update_checking = False
+        self.pending_update = None
         self.web_sources = []
         self.reporter = reporter
         self.online = None
@@ -71,6 +74,8 @@ class MainWindow:
         self.root.protocol("WM_DELETE_WINDOW", self._close)
         self.root.report_callback_exception = self._callback_error
         threading.Thread(target=self._monitor_connection, daemon=True).start()
+        if getattr(sys, "frozen", False):
+            self.root.after(25000, self._automatic_update)
 
     def _build(self):
         self.root.title("Nexo" if getattr(sys, "frozen", False) else "Nexo · Pruebas")
@@ -84,6 +89,8 @@ class MainWindow:
         menu = tk.Menu(self.root)
         options = tk.Menu(menu, tearoff=False)
         options.add_command(label="Preferencias…", accelerator="Ctrl+,", command=self._settings_dialog)
+        options.add_command(label="Estado de Nexo…", command=self._show_health)
+        options.add_command(label="Atajos de teclado…", command=self._show_shortcuts)
         options.add_command(label="Buscar actualizaciones", command=self._check_updates)
         options.add_command(label="Reportes de errores…", command=self._reporting_dialog)
         options.add_command(label="Registro del modo avanzado…", command=self._open_advanced_activity)
@@ -95,15 +102,12 @@ class MainWindow:
         self.root.config(menu=menu)
         ttk.Label(body, text="Nexo", font=("Segoe UI", 22, "bold")).pack(anchor="w")
         self.status = tk.StringVar(value="Iniciando asistente.")
-        ttk.Label(body, text="Estado del asistente").pack(anchor="w")
+        self.readiness = tk.StringVar(value="Comprobando Nexo…")
+        ttk.Label(body, textvariable=self.readiness).pack(anchor="w")
         ttk.Label(body, textvariable=self.status, wraplength=620).pack(anchor="w", pady=(0, 10))
         self.connection_status = tk.StringVar(value="Comprobando conexión a internet…")
-        ttk.Label(body, textvariable=self.connection_status).pack(anchor="w", pady=(0, 8))
         self.provider_status = tk.StringVar()
-        ttk.Label(body, text="Estado del proveedor de inteligencia artificial").pack(anchor="w")
-        ttk.Label(body, textvariable=self.provider_status, wraplength=620).pack(anchor="w", pady=(0, 8))
         self.reasoning_status = tk.StringVar(value="Luna: razonamiento automático. Alt+R lee el nivel elegido." if self.selected == "openai" else "Razonamiento automático de Nexo: disponible al seleccionar Luna.")
-        ttk.Label(body, textvariable=self.reasoning_status, wraplength=740).pack(anchor="w", pady=(0, 8))
         self.provider_label = ttk.Label(body, text=f"Modelo para la siguiente petición · {self.settings.hotkey_provider} para cambiar")
         self.provider_label.pack(anchor="w")
         self.provider_choice = tk.StringVar()
@@ -113,15 +117,13 @@ class MainWindow:
         self.provider_combo.bind("<<ComboboxSelected>>", self._select_provider)
         self._update_provider_status()
         self.mic_status = tk.StringVar(value=microphone_status())
-        ttk.Label(body, text="Estado del micrófono").pack(anchor="w")
-        ttk.Label(body, textvariable=self.mic_status, wraplength=620).pack(anchor="w", pady=(0, 10))
         buttons = ttk.Frame(body)
         buttons.pack(fill="x", pady=(0, 10))
         self.listen_button = ttk.Button(buttons, text="Escuchar", command=self._start_voice)
         self.listen_button.pack(side="left", padx=(0, 8))
         ttk.Button(buttons, text="Detener o cancelar", command=self._cancel).pack(side="left")
         ttk.Button(buttons, text="Configuración", command=self._settings_dialog).pack(side="left", padx=(8, 0))
-        ttk.Label(body, text="Conversación · Alt+H para leer; Alt+Arriba/Abajo recorre mensajes").pack(anchor="w")
+        ttk.Label(body, text="Conversación").pack(anchor="w")
         chat_frame = ttk.Frame(body)
         chat_frame.pack(fill="both", expand=True, pady=(6, 12))
         self.chat = tk.Text(chat_frame, state="disabled", wrap="word", font=("Segoe UI", 12), background="#f3f5fa", foreground="#172238", relief="flat", padx=16, pady=14, takefocus=True, height=10)
@@ -135,7 +137,7 @@ class MainWindow:
         self.chat.bind("<KeyPress>", self._chat_key)
         self.chat.bind("<Tab>", lambda _e: self._focus_input())
         self.chat.bind("<Shift-Tab>", lambda _e: self._previous_focus())
-        ttk.Label(body, text="Mensaje · Enter para enviar · Alt+M para escribir").pack(anchor="w")
+        ttk.Label(body, text="Mensaje").pack(anchor="w")
         self.command_entry = ttk.Entry(body)
         self.command_entry.pack(fill="x", pady=(0, 5))
         self.command_entry.bind("<Return>", lambda _event: self._start_text())
@@ -159,6 +161,46 @@ class MainWindow:
         widget.delete("1.0", "end")
         widget.insert("1.0", text)
         widget.config(state="disabled")
+
+    def _show_info(self, title, lines):
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.transient(self.root)
+        content = tk.Text(dialog, wrap="word", width=60, height=12)
+        content.pack(fill="both", expand=True, padx=12, pady=12)
+        self._set_text(content, "\n".join(lines))
+        ttk.Button(dialog, text="Cerrar", command=dialog.destroy).pack(pady=(0, 12))
+        dialog.bind("<Escape>", lambda _event: dialog.destroy())
+        content.bind("<Tab>", lambda _event: content.tk_focusNext().focus_set() or "break")
+        content.focus_set()
+        self.speech.interrupt_and_speak(". ".join(lines))
+
+    def _show_health(self):
+        self.mic_status.set(microphone_status())
+        self._sync_controls()
+        self._show_info("Estado de Nexo", [
+            self.connection_status.get(),
+            "Gemini " + ("configurado" if "gemini" in self.providers else "sin clave"),
+            "Luna " + ("configurado" if "openai" in self.providers else "sin clave"),
+            "Micrófono. " + self.mic_status.get(),
+            self.provider_status.get().split(". Gemini:")[0],
+            "Modo avanzado " + ("activado" if self.advanced_mode else "desactivado"),
+            self.reasoning_status.get(),
+        ])
+
+    def _show_shortcuts(self):
+        self._show_info("Atajos de teclado", [
+            f"{self.settings.hotkey_listen} para hablar desde cualquier ventana",
+            f"{self.settings.hotkey_cancel} para cancelar desde cualquier ventana",
+            f"{self.settings.hotkey_provider} para cambiar de modelo desde cualquier ventana",
+            "Control más coma para abrir Preferencias",
+            "Alt más M para escribir. Enter para enviar",
+            "Alt más H para enfocar el chat. F6 para alternar entre el chat y el campo de mensaje",
+            "Alt más arriba o abajo para recorrer y leer el chat",
+            "Alt más R para oír el nivel de razonamiento de Luna",
+            "Control más A para seleccionar el chat. Control más C para copiar",
+            "En la revisión del dictado, Enter para enviar, Escape para cancelar y otra tecla para repetir",
+        ])
 
     def _append_message(self, role, text):
         start = self.chat.index("end-1c")
@@ -197,7 +239,7 @@ class MainWindow:
             self.chat.focus_set()
             self.chat.mark_set("insert", position)
             self.chat.see(position)
-            self.speech.speak(text)
+            self.speech.interrupt_and_speak(text)
         return "break"
 
     def _announce_error(self, text, record=True):
@@ -241,6 +283,13 @@ class MainWindow:
         buttons[0].focus_set()
 
     def _sync_controls(self):
+        if self.online is None:
+            readiness = "Comprobando conexión…"
+        elif self.online and {"gemini", "openai"} <= self.providers.keys() and self.mic_status.get().startswith("Disponible:"):
+            readiness = "Nexo está listo."
+        else:
+            readiness = "Consulta Estado de Nexo en Configuración."
+        self.readiness.set(readiness)
         allowed = bool(self.online) and not self.busy
         self.listen_button.config(state="normal" if allowed else "disabled")
         self.send_button.config(state="normal" if allowed else "disabled")
@@ -314,6 +363,8 @@ class MainWindow:
         ).pack(anchor="w", pady=(4, 12))
         review = tk.BooleanVar(dialog, value=self.settings.review_transcript)
         ttk.Checkbutton(frame, text="Escuchar antes de enviar", variable=review).pack(anchor="w")
+        review_hint = tk.BooleanVar(dialog, value=self.settings.speak_review_hint)
+        ttk.Checkbutton(frame, text="Leer recordatorio de teclas al revisar el dictado", variable=review_hint).pack(anchor="w")
         advanced = tk.BooleanVar(dialog, value=self.settings.advanced_mode)
         advanced_option = ttk.Checkbutton(frame, text="Activar modo avanzado de Luna", variable=advanced)
         advanced_option.pack(anchor="w")
@@ -348,6 +399,7 @@ class MainWindow:
                     value, selected_recognition, selected_voice,
                     confirm_actions=selected_confirmation, hotkey_provider=provider_shortcut,
                     advanced_mode=advanced.get(), review_transcript=review.get(),
+                    speak_review_hint=review_hint.get(),
                 )
             except Exception as exc:
                 if candidate is not None:
@@ -368,7 +420,7 @@ class MainWindow:
                 self.provider_label.configure(text=f"Modelo para la siguiente petición · {provider_shortcut} para cambiar")
                 self.status.set(f"Atajos guardados. Hablar: {value}. Cambiar modelo: {provider_shortcut}.")
             self._apply_preferences(selected_recognition, selected_voice, selected_confirmation)
-            self.settings = replace(self.settings, advanced_mode=advanced.get(), review_transcript=review.get())
+            self.settings = replace(self.settings, advanced_mode=advanced.get(), review_transcript=review.get(), speak_review_hint=review_hint.get())
             enabled = self.selected == "openai" and self.settings.advanced_mode
             if enabled != self.advanced_mode:
                 self.advanced_mode = enabled
@@ -419,16 +471,51 @@ class MainWindow:
         return self.last_target
 
     def _check_updates(self):
-        if not self._can_send():
+        self._request_update(manual=True)
+
+    def _automatic_update(self):
+        self._request_update(manual=False)
+        self.root.after(3600000, self._automatic_update)
+
+    def _request_update(self, *, manual):
+        if self.update_checking or self.pending_update is not None or (not manual and self.online is False):
             return
-        self.status.set("Buscando actualizaciones en GitHub.")
+        installed = getattr(sys, "frozen", False)
+        self.update_checking = True
+        if manual:
+            self.speech.speak("Buscando actualizaciones en GitHub.")
+
         def work():
             try:
-                self.events.put(("update", check_latest()))
+                self.events.put(("update", check_latest(download=installed), installed, manual))
             except Exception as exc:
                 self.logger.error("update_check_failed", exc_info=True)
-                self.events.put(("update_error", str(exc)))
+                self.events.put(("update_error", manual))
         threading.Thread(target=work, daemon=True).start()
+
+    def _install_pending_update(self):
+        if self.pending_update is None or self.busy or self.root.grab_current() or self.closed.is_set():
+            return
+        installer = self.pending_update
+        self.pending_update = None
+        self.busy = True
+        self._sync_controls()
+        background = self.root.state() == "withdrawn"
+        self.status.set("Nexo se está actualizando.")
+
+        def launch():
+            try:
+                self.speech.speak_and_wait("Nexo se está actualizando.")
+                mode = "background" if background else "window"
+                subprocess.Popen([
+                    str(installer), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOCLOSEAPPLICATIONS",
+                    f"/DIR={os.path.dirname(sys.executable)}", f"/NEXOAUTO={mode}",
+                ], creationflags=subprocess.CREATE_NO_WINDOW)
+                self.events.put(("installer_started",))
+            except Exception:
+                self.logger.error("update_install_failed", exc_info=True)
+                self.events.put(("error", "No pude iniciar la actualización de Nexo."))
+        threading.Thread(target=launch, daemon=True).start()
 
     def _update_provider_status(self):
         name = "Gemini" if self.selected == "gemini" else "GPT-6 Luna" if self.selected == "openai" else "Ninguno"
@@ -527,11 +614,10 @@ class MainWindow:
                     answer = []
                     decided = threading.Event()
                     self.events.put(("review", utterance, answer, decided))
-                    self.speech.speak_and_wait(
-                        f"Entendí lo siguiente. {utterance} "
-                        "Pulsa Enter para enviar, otra tecla para repetir o Escape para cancelar. "
-                        "Si esperas tres segundos, lo enviaré."
-                    )
+                    spoken_review = f"Entendí lo siguiente. {utterance}"
+                    if self.settings.speak_review_hint:
+                        spoken_review += " Pulsa Enter para enviar, otra tecla para repetir o Escape para cancelar. Si esperas tres segundos, lo enviaré."
+                    self.speech.speak_and_wait(spoken_review)
                     self.events.put(("review_read", decided))
                     while not decided.wait(0.1):
                         if self.cancel_event.is_set():
@@ -767,15 +853,23 @@ class MainWindow:
                     self.downloading_models = False
                     self._announce_error("No pude descargar los modelos. Revisa internet y el espacio disponible e inténtalo de nuevo.")
                 elif kind == "update":
-                    if event[1] is None:
+                    update, installed, manual = event[1:]
+                    self.update_checking = False
+                    if update is None and manual:
                         self.status.set(f"La versión {release_settings()['version']} está actualizada.")
-                    else:
-                        version, page = event[1]
-                        self.status.set(f"Actualización {version} disponible.")
-                        if not self.settings.require_confirmation_for_sensitive_actions or messagebox.askyesno("Actualización disponible", f"Hay una versión {version}. ¿Quieres abrir la página de descarga en GitHub?", parent=self.root):
-                            webbrowser.open(page)
+                    elif update is not None:
+                        version, location = update
+                        if installed:
+                            self.pending_update = location
+                        elif messagebox.askyesno("Actualización disponible", f"Hay una versión {version}. ¿Quieres abrir la página de descarga en GitHub?", parent=self.root):
+                            webbrowser.open(location)
                 elif kind == "update_error":
-                    self._announce_error(f"No pude buscar actualizaciones: {event[1][:180]}")
+                    self.update_checking = False
+                    if event[1]:
+                        self._announce_error("No pude obtener la actualización desde GitHub.")
+                elif kind == "installer_started":
+                    self._close()
+                    return
                 elif kind == "recorded":
                     if not self.cancel_event.is_set():
                         self.status.set("Escucha terminada. Transcribiendo.")
@@ -858,6 +952,7 @@ class MainWindow:
                         self.status.set("Acción cancelada.")
         except Empty:
             pass
+        self._install_pending_update()
         self.root.after(100, self._drain)
 
     def _confirmed_worker(self, prepared: Prepared, utterance: str):

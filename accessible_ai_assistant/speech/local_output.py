@@ -1,6 +1,8 @@
 """Serialized Piper synthesis/playback with local Windows voice on failure."""
 from io import BytesIO
 from queue import Queue
+from tempfile import TemporaryDirectory
+from pathlib import Path
 import threading
 import wave
 import winsound
@@ -18,6 +20,7 @@ class LocalSpeechOutput:
         self.on_error = None
         self.queue = Queue()
         self.closed = False
+        self.announcement = threading.Event()
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
 
@@ -26,8 +29,10 @@ class LocalSpeechOutput:
             item = self.queue.get()
             if item is None:
                 break
-            text, done = item
+            text, done, cancelled = item
             try:
+                if cancelled and cancelled.is_set():
+                    continue
                 if self.engine == "piper":
                     try:
                         if self.voice is None:
@@ -38,7 +43,21 @@ class LocalSpeechOutput:
                         audio = BytesIO()
                         with wave.open(audio, "wb") as wav:
                             self.voice.synthesize_wav(text, wav)
-                        winsound.PlaySound(audio.getvalue(), winsound.SND_MEMORY)
+                        if cancelled is None:
+                            winsound.PlaySound(audio.getvalue(), winsound.SND_MEMORY)
+                        elif not cancelled.is_set():
+                            audio.seek(0)
+                            with wave.open(audio, "rb") as wav:
+                                duration = wav.getnframes() / wav.getframerate()
+                            with TemporaryDirectory(prefix="nexo-voice-") as folder:
+                                path = Path(folder) / "voice.wav"
+                                path.write_bytes(audio.getvalue())
+                                if not cancelled.is_set():
+                                    winsound.PlaySound(str(path), winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
+                                    try:
+                                        cancelled.wait(duration + 0.05)
+                                    finally:
+                                        winsound.PlaySound(None, 0)
                         continue
                     except Exception:
                         logging.getLogger("accessible_assistant").error("piper_synthesis_failed", exc_info=True)
@@ -47,7 +66,10 @@ class LocalSpeechOutput:
                         self.fallback.speak(warning)
                         if self.on_error and not self.closed:
                             self.on_error(warning)
-                self.fallback.speak_and_wait(text, timeout=120)
+                if cancelled is None:
+                    self.fallback.speak_and_wait(text, timeout=120)
+                else:
+                    self.fallback.speak_and_wait(text, timeout=120, cancelled=cancelled)
             except Exception:
                 logging.getLogger("accessible_assistant").error("speech_playback_failed", exc_info=True)
                 if self.on_error and not self.closed:
@@ -58,15 +80,21 @@ class LocalSpeechOutput:
 
     def speak(self, text):
         if text and not self.closed:
-            self.queue.put((text[:4000], None))
+            self.queue.put((text[:4000], None, self.announcement))
+
+    def interrupt_and_speak(self, text):
+        self.announcement.set()
+        self.announcement = threading.Event()
+        self.speak(text)
 
     def speak_and_wait(self, text, timeout=60):
         done = threading.Event()
-        self.queue.put((text[:4000], done))
+        self.queue.put((text[:4000], done, None))
         if not done.wait(timeout):
             raise RuntimeError("La lectura de voz está tardando demasiado.")
 
     def close(self):
         self.closed = True
+        self.announcement.set()
         self.queue.put(None)
         self.fallback.close()

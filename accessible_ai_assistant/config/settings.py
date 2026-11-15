@@ -28,6 +28,7 @@ class Settings:
     hotkey_provider: str = DEFAULT_PROVIDER_SHORTCUT
     advanced_mode: bool = False
     review_transcript: bool = False
+    speak_review_hint: bool = True
 
 
 def load_settings() -> Settings:
@@ -48,6 +49,7 @@ def load_settings() -> Settings:
         hotkey_provider=str(data.get("hotkey_provider", DEFAULT_PROVIDER_SHORTCUT)),
         advanced_mode=data.get("advanced_mode") is True,
         review_transcript=data.get("review_transcript") is True,
+        speak_review_hint=data.get("speak_review_hint", True) is True,
         require_confirmation_for_sensitive_actions=bool(data.get("require_confirmation_for_sensitive_actions", True)),
         enable_screen_vision=bool(data.get("enable_screen_vision", True)),
         learning_mode=bool(data.get("learning_mode", True)),
@@ -66,6 +68,7 @@ def save_listen_hotkey(
     hotkey_provider: str | None = None,
     advanced_mode: bool | None = None,
     review_transcript: bool | None = None,
+    speak_review_hint: bool | None = None,
 ) -> None:
     parse_hotkey(value)
     if hotkey_provider is not None:
@@ -85,6 +88,8 @@ def save_listen_hotkey(
         data["advanced_mode"] = advanced_mode
     if review_transcript is not None:
         data["review_transcript"] = review_transcript
+    if speak_review_hint is not None:
+        data["speak_review_hint"] = speak_review_hint
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(data, indent=2), encoding="utf-8")
     temporary.replace(path)

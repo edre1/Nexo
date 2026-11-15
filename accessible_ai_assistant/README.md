@@ -56,6 +56,10 @@ El arranque de pruebas instala los componentes en `%LOCALAPPDATA%\Nexo\entorno-p
 
 ## Interfaz de chat en pruebas
 
+El menú **Configuración** incluye **Estado de Nexo** y **Atajos de teclado**. Al recorrer el chat con Alt y flechas, Nexo interrumpe la lectura anterior. En Preferencias puedes silenciar el recordatorio de teclas de la revisión del dictado.
+
+Gemini puede buscar en Google desde sus respuestas. Puede consultar la pantalla y sus controles. Las acciones de control de Windows se realizan con Luna.
+
 La ventana muestra la conversación en burbujas y anuncia respuestas y errores con la voz de Windows.
 
 - Enter envía el mensaje escrito. Tab y Mayús+Tab recorren los controles.
@@ -83,6 +87,8 @@ Los modelos de prueba son `gemini-3.5-flash-lite` y `gpt-6-luna`. La opción de 
 El reconocimiento de voz graba hasta 60 segundos, con corte tras 3 segundos de silencio, y envía el audio a Gemini o a `gpt-transcribe` de OpenAI. La descripción visual envía una captura al proveedor seleccionado cuando se pregunta por la pantalla. Las consultas a la IA dependen de internet y de los límites de cada cuenta. OpenAI API puede generar cargos por uso.
 
 ## Instalación y traslado a otra computadora
+
+Desde la versión instalada 1.2.0, Nexo comprueba las actualizaciones al arrancar y después cada hora. Descarga y verifica el instalador de GitHub, espera a que termine la petición activa y se reinicia tras instalarlo. La copia de pruebas se actualiza por separado.
 
 El instalador ofrece **Iniciar Nexo en segundo plano al iniciar sesión en Windows**. Con esa opción marcada, los atajos globales funcionan desde otras aplicaciones sin abrir el chat. Para mostrarlo, abre Nexo desde el menú Inicio o el escritorio. Para ocultarlo de nuevo, usa **Configuración → Ocultar y seguir escuchando el atajo**.
 
