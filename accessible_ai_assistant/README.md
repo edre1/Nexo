@@ -58,7 +58,7 @@ El arranque de pruebas instala los componentes en `%LOCALAPPDATA%\Nexo\entorno-p
 
 El menú **Configuración** incluye **Estado de Nexo** y **Atajos de teclado**. Al recorrer el chat con Alt y flechas, Nexo interrumpe la lectura anterior. En Preferencias puedes silenciar el recordatorio de teclas de la revisión del dictado.
 
-Gemini puede buscar en Google desde sus respuestas. Puede consultar la pantalla y sus controles. Las acciones de control de Windows se realizan con Luna.
+En Preferencias puedes permitir que Gemini busque en internet. La búsqueda está desactivada por defecto. Gemini puede consultar la pantalla y sus controles. Las acciones de control de Windows se realizan con Luna.
 
 La ventana muestra la conversación en burbujas y anuncia respuestas y errores con la voz de Windows.
 

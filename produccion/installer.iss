@@ -1,4 +1,4 @@
-#define MyAppVersion "1.2.0"
+#define MyAppVersion "1.2.1"
 [Setup]
 AppId={{02A82DB4-F6FC-4859-A41F-4C15B21714AE}
 AppName=Nexo

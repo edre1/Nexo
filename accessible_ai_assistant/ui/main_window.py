@@ -42,6 +42,8 @@ class MainWindow:
         self.accessibility = accessibility
         self.logger = logger
         self.providers = providers
+        if "gemini" in providers:
+            providers["gemini"].web_search_enabled = settings.gemini_web_search
         self.selected = selected
         self.advanced_mode = selected == "openai" and settings.advanced_mode
         self.processing_timer = None
@@ -365,6 +367,8 @@ class MainWindow:
         ttk.Checkbutton(frame, text="Escuchar antes de enviar", variable=review).pack(anchor="w")
         review_hint = tk.BooleanVar(dialog, value=self.settings.speak_review_hint)
         ttk.Checkbutton(frame, text="Leer recordatorio de teclas al revisar el dictado", variable=review_hint).pack(anchor="w")
+        gemini_search = tk.BooleanVar(dialog, value=self.settings.gemini_web_search)
+        ttk.Checkbutton(frame, text="Permitir que Gemini busque en internet", variable=gemini_search).pack(anchor="w")
         advanced = tk.BooleanVar(dialog, value=self.settings.advanced_mode)
         advanced_option = ttk.Checkbutton(frame, text="Activar modo avanzado de Luna", variable=advanced)
         advanced_option.pack(anchor="w")
@@ -400,6 +404,7 @@ class MainWindow:
                     confirm_actions=selected_confirmation, hotkey_provider=provider_shortcut,
                     advanced_mode=advanced.get(), review_transcript=review.get(),
                     speak_review_hint=review_hint.get(),
+                    gemini_web_search=gemini_search.get(),
                 )
             except Exception as exc:
                 if candidate is not None:
@@ -420,7 +425,12 @@ class MainWindow:
                 self.provider_label.configure(text=f"Modelo para la siguiente petición · {provider_shortcut} para cambiar")
                 self.status.set(f"Atajos guardados. Hablar: {value}. Cambiar modelo: {provider_shortcut}.")
             self._apply_preferences(selected_recognition, selected_voice, selected_confirmation)
-            self.settings = replace(self.settings, advanced_mode=advanced.get(), review_transcript=review.get(), speak_review_hint=review_hint.get())
+            self.settings = replace(
+                self.settings, advanced_mode=advanced.get(), review_transcript=review.get(),
+                speak_review_hint=review_hint.get(), gemini_web_search=gemini_search.get(),
+            )
+            if "gemini" in self.providers:
+                self.providers["gemini"].web_search_enabled = self.settings.gemini_web_search
             enabled = self.selected == "openai" and self.settings.advanced_mode
             if enabled != self.advanced_mode:
                 self.advanced_mode = enabled

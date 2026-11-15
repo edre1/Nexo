@@ -23,6 +23,8 @@ REPLY_SCHEMA = {
 
 
 class GeminiProvider(AIProvider):
+    web_search_enabled = False
+
     def __init__(self, api_key: str, model: str):
         if not api_key:
             raise ValueError("Falta GEMINI_API_KEY. Consulta el archivo README.md.")
@@ -50,8 +52,9 @@ class GeminiProvider(AIProvider):
             model=self.model,
             contents=f"Diálogo reciente: {recent}\nPetición: {utterance}",
             config=types.GenerateContentConfig(
-                system_instruction=SPOKEN_STYLE + SEARCH_GUIDANCE + " Puedes responder y buscar información. Para acciones en Windows, indica que seleccione Luna.",
-                tools=SEARCH_TOOLS,
+                system_instruction=SPOKEN_STYLE + " Para acciones en Windows, indica que seleccione Luna."
+                + (SEARCH_GUIDANCE if self.web_search_enabled else " Si la petición requiere consultar internet, explica que la búsqueda está desactivada en Preferencias."),
+                tools=SEARCH_TOOLS if self.web_search_enabled else None,
             ),
         )
         text = plain_spoken_text(answer.text or "")[:700]
@@ -78,6 +81,10 @@ class GeminiProvider(AIProvider):
                 f"Pregunta del usuario: {question}\nContexto de accesibilidad: {context}",
                 types.Part.from_bytes(data=png_bytes, mime_type="image/png"),
             ],
-            config=types.GenerateContentConfig(system_instruction=screen_instructions() + SEARCH_GUIDANCE, tools=SEARCH_TOOLS, temperature=0),
+            config=types.GenerateContentConfig(
+                system_instruction=screen_instructions() + (SEARCH_GUIDANCE if self.web_search_enabled else ""),
+                tools=SEARCH_TOOLS if self.web_search_enabled else None,
+                temperature=0,
+            ),
         )
         return plain_spoken_text(response.text or "")[:1200] or "No pude responder la pregunta sobre la pantalla."

@@ -13,17 +13,21 @@ from ui.main_window import MainWindow
 
 
 class SpokenResponseTests(unittest.TestCase):
-    def test_gemini_search_is_enabled_and_local_mutations_are_discarded(self):
+    def test_gemini_search_is_optional_and_local_mutations_are_discarded(self):
         gemini = object.__new__(GeminiProvider)
         gemini.model, gemini.client = "gemini-3.5-flash-lite", Mock()
         generate = gemini.client.models.generate_content
-        generate.side_effect = [
+        responses = [
             SimpleNamespace(text='{"type":"action","action":"write_text","parameters":{"text":"Hola"},"spoken_response":"Voy a escribir."}'),
             SimpleNamespace(text="Usa Luna para escribir en Windows."),
         ]
+        generate.side_effect = responses * 2
         reply = gemini.interpret("Escribe Hola", "", [], False)
         self.assertEqual(reply.type, "response")
         self.assertIsNone(reply.action)
+        self.assertIsNone(generate.call_args.kwargs["config"].tools)
+        gemini.web_search_enabled = True
+        gemini.interpret("Escribe Hola", "", [], False)
         tools = generate.call_args.kwargs["config"].tools
         self.assertEqual(len(tools), 1)
         self.assertIsNotNone(tools[0].google_search)
