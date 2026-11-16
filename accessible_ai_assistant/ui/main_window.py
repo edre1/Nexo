@@ -19,6 +19,7 @@ from assistant_service import AssistantService, Prepared
 from config.settings import Settings, save_listen_hotkey
 from utils.connectivity import internet_available
 from speech.local_models import download_models
+from speech.local_output import verify_piper
 from speech.output import WindowsSpeechOutput
 from speech.recognizer import ProviderSpeechRecognizer, microphone_status
 from updates import check_latest, release_settings
@@ -468,10 +469,19 @@ class MainWindow:
         def work():
             try:
                 download_models(lambda text: self.events.put(("status", text)))
-                self.events.put(("models_ready",))
             except Exception:
                 self.logger.error("model_download_failed", exc_info=True)
                 self.events.put(("models_error",))
+                return
+            try:
+                self.events.put(("status", "Comprobando la voz de Piper."))
+                verify_piper()
+            except Exception:
+                self.logger.error("model_voice_check_failed", exc_info=True)
+                self.events.put(("models_voice_error",))
+            else:
+                self.logger.info("Piper generó audio durante la comprobación.")
+                self.events.put(("models_ready",))
         threading.Thread(target=work, daemon=True).start()
 
     def _target(self) -> int:
@@ -862,6 +872,10 @@ class MainWindow:
                 elif kind == "models_error":
                     self.downloading_models = False
                     self._announce_error("No pude descargar los modelos. Revisa internet y el espacio disponible e inténtalo de nuevo.")
+                elif kind == "models_voice_error":
+                    self.downloading_models = False
+                    self.speech.engine = "windows"
+                    self._announce_error("Descargué los archivos, pero Piper no pudo generar voz. Usaré la voz de Windows.")
                 elif kind == "update":
                     update, installed, manual = event[1:]
                     self.update_checking = False

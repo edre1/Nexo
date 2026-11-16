@@ -12,8 +12,11 @@ if (-not (Test-Path -LiteralPath $python)) { throw 'Primero abre iniciar.bat en 
 if (-not $iscc) { throw 'Falta Inno Setup 6.' }
 Push-Location $project
 try {
-    & $python -m PyInstaller --noconfirm --clean --onedir --windowed --name Nexo --icon $icon --distpath (Join-Path $PSScriptRoot 'dist') --workpath (Join-Path $PSScriptRoot 'build') --specpath $PSScriptRoot --add-data "$icon;assets" --add-data "$(Join-Path $project 'config/config.json');config" --add-data "$(Join-Path $project 'config/release.json');config" main.py
+    & $python -m PyInstaller --noconfirm --clean --onedir --windowed --name Nexo --icon $icon --collect-data piper --distpath (Join-Path $PSScriptRoot 'dist') --workpath (Join-Path $PSScriptRoot 'build') --specpath $PSScriptRoot --add-data "$icon;assets" --add-data "$(Join-Path $project 'config/config.json');config" --add-data "$(Join-Path $project 'config/release.json');config" main.py
     if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear el programa.' }
+    if (-not (Test-Path (Join-Path $PSScriptRoot 'dist/Nexo/_internal/piper/espeak-ng-data/phondata'))) {
+        throw 'El ejecutable no contiene los datos de pronunciación de Piper.'
+    }
     & $python -m PyInstaller --noconfirm --clean --onefile --windowed --name ConfigurarClaves --icon $icon --distpath (Join-Path $PSScriptRoot 'dist') --workpath (Join-Path $PSScriptRoot 'build') --specpath $PSScriptRoot configurar_clave.py
     if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear el configurador de claves.' }
 } finally { Pop-Location }

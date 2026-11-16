@@ -27,6 +27,15 @@ def piper_worker(connection, model):
         connection.send(audio.getvalue())
 
 
+def verify_piper():
+    with audio_process(piper_worker, str(PIPER)) as (connection, process):
+        connection.send("Prueba de voz de Nexo.")
+        audio = receive_audio(connection, process, 45)
+        with wave.open(BytesIO(audio), "rb") as wav:
+            if not wav.getnframes():
+                raise RuntimeError("Piper no generó audio.")
+
+
 class LocalSpeechOutput:
     def __init__(self, engine="piper"):
         self.engine = engine
