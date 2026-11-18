@@ -21,7 +21,7 @@ if ($null -ne $LASTEXITCODE) { exit $LASTEXITCODE }
 """
 
 
-def run_powershell(command, cwd, check_cancel):
+def run_powershell(command, cwd, check_cancel, *, seconds=45):
     executable = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
     payload = b64encode(command.encode("utf-8")) + b"\n"
     env = {key: value for key, value in os.environ.items() if key.upper() not in {"OPENAI_API_KEY", "GEMINI_API_KEY"}}
@@ -44,14 +44,14 @@ def run_powershell(command, cwd, check_cancel):
                 finally:
                     handle.Close()
                 check_cancel()
-                deadline = time.monotonic() + 45
+                deadline = time.monotonic() + seconds
                 try:
                     process.communicate(payload, timeout=0.2)
                 except subprocess.TimeoutExpired:
                     while process.poll() is None:
                         check_cancel()
                         if time.monotonic() >= deadline:
-                            raise TimeoutError("El comando superó 45 segundos.")
+                            raise TimeoutError("El comando superó el tiempo configurado.")
                         try:
                             process.communicate(timeout=0.2)
                         except subprocess.TimeoutExpired:

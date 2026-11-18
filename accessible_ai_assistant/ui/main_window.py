@@ -62,11 +62,12 @@ class MainWindow:
             self.providers["openai"].on_reasoning = lambda choice, phase: self.events.put(("reasoning", choice, phase))
         self.cancel_event = threading.Event()
         self.busy = False
+        self.last_ai_response = ""
         self.last_target = 0
         self.own_hwnd = win32gui.GetAncestor(root.winfo_id(), win32con.GA_ROOT)
         self._build()
         self.speech.on_error = lambda text: self.events.put(("voice_warning", text))
-        self.hotkeys = GlobalHotkeys(settings.hotkey_listen, settings.hotkey_cancel, self._hotkey_event, provider=settings.hotkey_provider)
+        self.hotkeys = GlobalHotkeys(settings.hotkey_listen, settings.hotkey_cancel, self._hotkey_event, provider=settings.hotkey_provider, repeat=settings.hotkey_repeat, text=settings.hotkey_text)
         try:
             self.hotkeys.start()
             self.status.set(f"Listo. Atajo para escuchar: {settings.hotkey_listen}.")
@@ -74,7 +75,14 @@ class MainWindow:
             self._announce_error(str(exc))
         self.root.after(100, self._drain)
         self.root.after(500, self._track_target)
-        self.root.protocol("WM_DELETE_WINDOW", self._close)
+        self.tray = None
+        try:
+            from windows.tray import TrayIcon
+            self.tray = TrayIcon(self.events)
+            self.root.protocol("WM_DELETE_WINDOW", self.root.withdraw)
+        except Exception:
+            self.logger.error("tray_start_failed", exc_info=True)
+            self.root.protocol("WM_DELETE_WINDOW", self._close)
         self.root.report_callback_exception = self._callback_error
         threading.Thread(target=self._monitor_connection, daemon=True).start()
         if getattr(sys, "frozen", False):
@@ -93,6 +101,8 @@ class MainWindow:
         options = tk.Menu(menu, tearoff=False)
         options.add_command(label="Preferencias…", accelerator="Ctrl+,", command=self._settings_dialog)
         options.add_command(label="Estado de Nexo…", command=self._show_health)
+        options.add_command(label="Diagnóstico…", command=self._diagnose)
+        options.add_command(label="Atajos y límites de Luna…", command=self._limits_dialog)
         options.add_command(label="Atajos de teclado…", command=self._show_shortcuts)
         options.add_command(label="Buscar actualizaciones", command=self._check_updates)
         options.add_command(label="Reportes de errores…", command=self._reporting_dialog)
@@ -103,7 +113,7 @@ class MainWindow:
         options.add_command(label="Salir de Nexo", command=self._close)
         menu.add_cascade(label="Configuración", underline=0, menu=options)
         self.root.config(menu=menu)
-        ttk.Label(body, text="Nexo", font=("Segoe UI", 22, "bold")).pack(anchor="w")
+        ttk.Label(body, text="Nexo " + release_settings()["version"], font=("Segoe UI", 22, "bold")).pack(anchor="w")
         self.status = tk.StringVar(value="Iniciando asistente.")
         self.readiness = tk.StringVar(value="Comprobando Nexo…")
         ttk.Label(body, textvariable=self.readiness).pack(anchor="w")
@@ -148,6 +158,7 @@ class MainWindow:
         self.send_button.pack(anchor="e", pady=(0, 10))
         self._append_message("assistant", "Hola. Soy Nexo. Escribe un mensaje o usa el atajo de voz. Puedes revisar la conversación con Alt+H.")
         self._sync_controls()
+        ttk.Button(body, text="Diagnóstico", command=self._diagnose).pack(anchor="w")
         self.command_entry.focus_set()
         self.root.bind("<Escape>", lambda _event: self._cancel())
         self.root.bind("<Control-comma>", lambda _e: self._settings_dialog())
@@ -178,6 +189,102 @@ class MainWindow:
         content.focus_set()
         self.speech.interrupt_and_speak(". ".join(lines))
 
+    def _limits_dialog(self):
+        if self.busy:
+            self.speech.speak("Espera a que termine la petición.")
+            return
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Atajos y límites de Luna")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        fields = {}
+        ranges = {
+            "luna_seconds": ("Tiempo por tarea en segundos", 30, 3600),
+            "luna_turns": ("Consultas a Luna por tarea", 2, 100),
+            "luna_actions": ("Acciones de control visual normal", 1, 500),
+            "shell_seconds": ("Tiempo de cada comando en segundos", 5, 600),
+        }
+        for name, label in (("hotkey_repeat", "Repetir respuesta"), ("hotkey_text", "Escribir petición")):
+            ttk.Label(dialog, text=label + ". Ctrl+Alt más la tecla elegida").pack(anchor="w", padx=16)
+            field = ttk.Combobox(dialog, state="readonly", values=(*FUNCTION_KEYS, *tuple("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")))
+            field.set(getattr(self.settings, name).split("+")[-1])
+            field.pack(padx=16, pady=4)
+            fields[name] = field
+        for name, (label, low, high) in ranges.items():
+            ttk.Label(dialog, text=label).pack(anchor="w", padx=16)
+            field = ttk.Spinbox(dialog, from_=low, to=high)
+            field.set(getattr(self.settings, name))
+            field.pack(padx=16, pady=4)
+            fields[name] = field
+
+        def save():
+            if self.busy:
+                return
+            candidate = None
+            old = self.settings
+            try:
+                values = {name: int(fields[name].get()) for name in ranges}
+                for name, (_, low, high) in ranges.items():
+                    if not low <= values[name] <= high:
+                        raise ValueError(f"El valor debe estar entre {low} y {high}.")
+                values.update({name: "Ctrl+Alt+" + fields[name].get() for name in ("hotkey_repeat", "hotkey_text")})
+                candidate = GlobalHotkeys(old.hotkey_listen, old.hotkey_cancel, self._hotkey_event, provider=old.hotkey_provider, repeat=values["hotkey_repeat"], text=values["hotkey_text"])
+                self.hotkeys.close()
+                candidate.start(require_provider=True)
+                save_listen_hotkey(old.hotkey_listen, extras=values)
+            except Exception as exc:
+                if candidate is not None:
+                    candidate.close()
+                    self.hotkeys = GlobalHotkeys(old.hotkey_listen, old.hotkey_cancel, self._hotkey_event, provider=old.hotkey_provider, repeat=old.hotkey_repeat, text=old.hotkey_text)
+                    self.hotkeys.start()
+                self._announce_error(self._friendly_error(exc))
+                return
+            self.hotkeys = candidate
+            self.settings = replace(old, **values)
+            self.speech.speak("Atajos y límites guardados.")
+            dialog.destroy()
+
+        ttk.Button(dialog, text="Guardar", command=save).pack(pady=10)
+        dialog.bind("<Escape>", lambda _: dialog.destroy())
+
+    def _diagnose(self):
+        if self.busy or getattr(self, "diagnosing", False):
+            self.speech.speak("Espera a que termine la operación actual.")
+            return
+        self.diagnosing = True
+        self._sync_controls()
+        self.speech.speak("Comprobando Nexo. La prueba de los proveedores usa una petición breve.")
+        def work():
+            results = ["Versión " + release_settings()["version"]]
+            results.append("Internet disponible." if internet_available() else "Sin conexión a internet.")
+            results.append("Micrófono. " + microphone_status())
+            for key, name in (("gemini", "Gemini"), ("openai", "Luna")):
+                provider = self.providers.get(key)
+                if provider is None:
+                    results.append(name + " sin clave configurada.")
+                    continue
+                try:
+                    if key == "gemini":
+                        provider.client.models.generate_content(model=provider.model, contents="Responde OK.")
+                    else:
+                        provider.client.responses.create(model=provider.model, input="Responde OK.", max_output_tokens=32, reasoning={"effort": "none"}, timeout=20)
+                    results.append(name + " respondió correctamente.")
+                except Exception as exc:
+                    results.append(name + ". " + self._friendly_error(exc))
+            try:
+                verify_piper()
+                results.append("Piper generó audio correctamente.")
+            except Exception:
+                results.append("Piper no pudo generar audio. Revisa la descarga de voz.")
+            try:
+                self.speech.speak_and_wait("Prueba de voz de Nexo.")
+                results.append("La salida de voz terminó. Confirma que escuchaste la prueba.")
+            except Exception:
+                results.append("No se pudo reproducir la prueba de voz.")
+            results.append("Atajos registrados." if not self.hotkeys.error else self.hotkeys.error)
+            self.events.put(("diagnosis", results))
+        threading.Thread(target=work, daemon=True).start()
+
     def _show_health(self):
         self.mic_status.set(microphone_status())
         self._sync_controls()
@@ -196,6 +303,8 @@ class MainWindow:
             f"{self.settings.hotkey_listen} para hablar desde cualquier ventana",
             f"{self.settings.hotkey_cancel} para cancelar desde cualquier ventana",
             f"{self.settings.hotkey_provider} para cambiar de modelo desde cualquier ventana",
+            f"{self.settings.hotkey_repeat} para repetir la última respuesta",
+            f"{self.settings.hotkey_text} para escribir desde cualquier ventana",
             "Control más coma para abrir Preferencias",
             "Alt más M para escribir. Enter para enviar",
             "Alt más H para enfocar el chat. F6 para alternar entre el chat y el campo de mensaje",
@@ -293,7 +402,7 @@ class MainWindow:
         else:
             readiness = "Consulta Estado de Nexo en Configuración."
         self.readiness.set(readiness)
-        allowed = bool(self.online) and not self.busy
+        allowed = bool(self.online) and not self.busy and not getattr(self, "diagnosing", False)
         self.listen_button.config(state="normal" if allowed else "disabled")
         self.send_button.config(state="normal" if allowed else "disabled")
         self.provider_combo.config(state="disabled" if self.busy else "readonly")
@@ -320,7 +429,7 @@ class MainWindow:
                 self.reporter.retry_soon()
 
     def _can_send(self):
-        if self.busy:
+        if self.busy or getattr(self, "diagnosing", False):
             return False
         if not self.online:
             self.speech.speak("Sin conexión a internet. No se puede enviar la petición." if self.online is False else "Espera mientras compruebo la conexión a internet.")
@@ -397,7 +506,7 @@ class MainWindow:
             candidate = None
             try:
                 if provider_changed or value.upper() != previous.hotkey_listen.upper():
-                    candidate = GlobalHotkeys(value, previous.hotkey_cancel, self._hotkey_event, provider=provider_shortcut)
+                    candidate = GlobalHotkeys(value, previous.hotkey_cancel, self._hotkey_event, provider=provider_shortcut, repeat=previous.hotkey_repeat, text=previous.hotkey_text)
                     self.hotkeys.close()
                     candidate.start(require_provider=provider_changed)
                 save_listen_hotkey(
@@ -412,7 +521,7 @@ class MainWindow:
                     candidate.close()
                     self.hotkeys = GlobalHotkeys(
                         previous.hotkey_listen, previous.hotkey_cancel, self._hotkey_event,
-                        provider=previous.hotkey_provider,
+                        provider=previous.hotkey_provider, repeat=previous.hotkey_repeat, text=previous.hotkey_text,
                     )
                     try:
                         self.hotkeys.start()
@@ -422,7 +531,7 @@ class MainWindow:
                 return
             if candidate is not None:
                 self.hotkeys = candidate
-                self.settings = replace(self.settings, hotkey_listen=value, hotkey_provider=provider_shortcut)
+                self.settings = replace(self.settings, hotkey_listen=value, hotkey_provider=provider_shortcut, repeat=previous.hotkey_repeat, text=previous.hotkey_text)
                 self.provider_label.configure(text=f"Modelo para la siguiente petición · {provider_shortcut} para cambiar")
                 self.status.set(f"Atajos guardados. Hablar: {value}. Cambiar modelo: {provider_shortcut}.")
             self._apply_preferences(selected_recognition, selected_voice, selected_confirmation)
@@ -582,7 +691,7 @@ class MainWindow:
         self.root.after(500, self._track_target)
 
     def _hotkey_event(self, event: str):
-        if event in {"switch_provider", "provider_hotkey_unavailable"}:
+        if event in {"switch_provider", "provider_hotkey_unavailable", "repeat", "quick_text"}:
             self.events.put((event,))
             return
         if event == "cancel":
@@ -665,7 +774,7 @@ class MainWindow:
                 context = "Ventana de destino no identificada"
             if self.selected == "openai" and self.advanced_mode:
                 driver = ComputerDriver(target, self.own_hwnd, self.cancel_event, desktop=True)
-                session = AdvancedSession(self.service.provider, driver, self.cancel_event, lambda text: self.events.put(("status", text)))
+                session = AdvancedSession(self.service.provider, driver, self.cancel_event, lambda text: self.events.put(("status", text)), settings=self.settings)
                 recent = "\n".join(f"Usuario: {u}\nNexo: {a}" for u, a in self.service.history[-3:])
                 result = session.run(utterance, recent, context)
                 if not self.cancel_event.is_set():
@@ -766,7 +875,7 @@ class MainWindow:
                     raise ValueError("Activa la visión de pantalla para usar el control visual.")
                 driver = ComputerDriver(prepared.target_hwnd, self.own_hwnd, self.cancel_event)
                 confirm = self._confirm_visual if self.settings.require_confirmation_for_sensitive_actions else None
-                session = ComputerSession(self.service.provider, driver, self.cancel_event, confirm, lambda text: self.events.put(("status", text)))
+                session = ComputerSession(self.service.provider, driver, self.cancel_event, confirm, lambda text: self.events.put(("status", text)), max_turns=self.settings.luna_turns, max_actions=self.settings.luna_actions, seconds=self.settings.luna_seconds)
                 recent = "\n".join(f"Usuario: {u}\nNexo: {a}" for u, a in self.service.history[-3:])
                 result = session.run(utterance, recent)
                 self.service.history.append((utterance, result))
@@ -841,6 +950,20 @@ class MainWindow:
                         self.review_finish("retry")
                     else:
                         self._start_voice(event[1])
+                elif kind == "exit":
+                    self._close()
+                    return
+                elif kind == "quick_text":
+                    self.root.deiconify()
+                    self.root.lift()
+                    self.root.focus_force()
+                    self.command_entry.focus_set()
+                elif kind == "repeat":
+                    self.speech.interrupt_and_speak(self.last_ai_response or "Aún no hay una respuesta para repetir.")
+                elif kind == "diagnosis":
+                    self.diagnosing = False
+                    self._sync_controls()
+                    self._show_info("Diagnóstico", event[1])
                 elif kind == "switch_provider":
                     self._set_provider("gemini" if self.selected == "openai" else "openai")
                 elif kind == "provider_hotkey_unavailable":
@@ -999,6 +1122,8 @@ class MainWindow:
         self._stop_processing_timer()
         self.status.set(result if label == "error" else "Listo.")
         self._append_message("error" if label == "error" else "assistant", result)
+        if label not in {"error", "cancelada"}:
+            self.last_ai_response = result
         self.speech.speak(result)
         self.busy = False
         self._sync_controls()
@@ -1013,6 +1138,8 @@ class MainWindow:
     def _close(self):
         self.closed.set()
         self.cancel_event.set()
+        if self.tray:
+            self.tray.close()
         self.hotkeys.close()
         self.speech.close()
         if self.reporter:

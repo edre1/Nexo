@@ -4,13 +4,25 @@ import tempfile
 import threading
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from ai.advanced_session import AdvancedSession
 from utils.advanced_activity import AdvancedActivity
 
 
 class AdvancedSessionTests(unittest.TestCase):
+    def test_unsaved_editor_changes_prevent_overwriting_file(self):
+        import time
+        path = self.root / "example.py"
+        path.write_text("print(1)", encoding="utf-8")
+        snapshot = {"path": str(path), "text": "print(2)", "disk_text": "print(1)", "unsaved": True}
+        self.session.editor = snapshot
+        self.session.deadline = time.monotonic() + 10
+        with patch("windows.editor_file.editor_snapshot", return_value=snapshot):
+            with self.assertRaisesRegex(ValueError, "sin guardar"):
+                self.session._write_file(path, "print(3)")
+        self.assertEqual(path.read_text(encoding="utf-8"), "print(1)")
+
     def setUp(self):
         folder = self.enterContext(tempfile.TemporaryDirectory())
         self.root = Path(folder)

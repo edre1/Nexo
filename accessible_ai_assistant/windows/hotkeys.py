@@ -41,11 +41,13 @@ def parse_hotkey(value: str) -> tuple[int, int]:
 
 
 class GlobalHotkeys:
-    def __init__(self, listen: str, cancel: str, callback, *, provider: str = DEFAULT_PROVIDER_SHORTCUT):
+    def __init__(self, listen: str, cancel: str, callback, *, provider: str = DEFAULT_PROVIDER_SHORTCUT, repeat="Ctrl+Alt+R", text="Ctrl+Alt+T"):
         self.listen = parse_hotkey(listen)
         self.cancel = parse_hotkey(cancel)
         self.provider = parse_hotkey(provider)
-        if len({self.listen, self.cancel, self.provider}) != 3:
+        self.repeat = parse_hotkey(repeat)
+        self.text = parse_hotkey(text)
+        if len({self.listen, self.cancel, self.provider, self.repeat, self.text}) != 5:
             raise ValueError("Los atajos para hablar, cancelar y cambiar de modelo deben ser distintos.")
         self.provider_shortcut = provider
         self.callback = callback
@@ -78,9 +80,14 @@ class GlobalHotkeys:
                 raise RuntimeError(f"El atajo {self.provider_shortcut} para cambiar de modelo puede estar ocupado por otra aplicación.")
             else:
                 self.callback("provider_hotkey_unavailable")
+            for hotkey_id, shortcut in ((4, self.repeat), (5, self.text)):
+                mods, key = shortcut
+                if not user32.RegisterHotKey(None, hotkey_id, mods | MOD_NOREPEAT, key):
+                    raise RuntimeError("No pude registrar el atajo para repetir o escribir. Elige otro en Preferencias.")
+                registrations.append(hotkey_id)
             self.ready.set()
             msg = MSG()
-            events = {1: "listen", 2: "cancel", 3: "switch_provider"}
+            events = {1: "listen", 2: "cancel", 3: "switch_provider", 4: "repeat", 5: "quick_text"}
             while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
                 if msg.message == WM_HOTKEY and msg.wParam in events:
                     self.callback(events[msg.wParam])

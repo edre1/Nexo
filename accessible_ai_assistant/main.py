@@ -86,6 +86,7 @@ def run_app(background, show_window) -> int:
     executor = ActionExecutor(controller, accessibility, provider, settings.enable_screen_vision)
     service = AssistantService(provider, SecurityManager(settings.require_confirmation_for_sensitive_actions), executor, logger, settings.learning_mode)
     speech = LocalSpeechOutput(settings.speech_output)
+    speech.preload()
     recognizer = ProviderSpeechRecognizer(provider)
     recognizer.engine = settings.speech_recognition
     MainWindow(root, settings, service, speech, recognizer, accessibility, logger, providers, selected, reporter=reporter)

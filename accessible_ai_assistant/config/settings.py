@@ -30,6 +30,13 @@ class Settings:
     review_transcript: bool = False
     speak_review_hint: bool = True
     gemini_web_search: bool = False
+    hotkey_repeat: str = "Ctrl+Alt+R"
+    hotkey_text: str = "Ctrl+Alt+T"
+    luna_seconds: int = 240
+    luna_turns: int = 12
+    luna_actions: int = 40
+    shell_seconds: int = 45
+
 
 
 def load_settings() -> Settings:
@@ -43,6 +50,13 @@ def load_settings() -> Settings:
         selected = "openai"
     return Settings(
         ai_provider=selected,
+        hotkey_repeat=str(data.get("hotkey_repeat", "Ctrl+Alt+R")),
+        hotkey_text=str(data.get("hotkey_text", "Ctrl+Alt+T")),
+        luna_seconds=int(data.get("luna_seconds", 240)),
+        luna_turns=int(data.get("luna_turns", 12)),
+        luna_actions=int(data.get("luna_actions", 40)),
+        shell_seconds=int(data.get("shell_seconds", 45)),
+
         model=str(data.get("model", "gemini-3.5-flash-lite")),
         openai_model="gpt-6-luna",
         hotkey_listen=str(data.get("hotkey_listen", "Ctrl+Alt+A")),
@@ -72,6 +86,7 @@ def save_listen_hotkey(
     review_transcript: bool | None = None,
     speak_review_hint: bool | None = None,
     gemini_web_search: bool | None = None,
+    extras: dict | None = None,
 ) -> None:
     parse_hotkey(value)
     if hotkey_provider is not None:
@@ -95,6 +110,8 @@ def save_listen_hotkey(
         data["speak_review_hint"] = speak_review_hint
     if gemini_web_search is not None:
         data["gemini_web_search"] = gemini_web_search
+    if extras:
+        data.update(extras)
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(data, indent=2), encoding="utf-8")
     temporary.replace(path)

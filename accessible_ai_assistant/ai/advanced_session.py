@@ -31,6 +31,7 @@ INSTRUCTIONS = SPOKEN_STYLE + (
     "Pide una captura con computer antes de mover el ratón o usar el teclado. Las coordenadas son "
     "relativas al escritorio capturado; el círculo magenta indica el puntero. Para consultas web, "
     "cita las páginas consultadas mediante las citas de la herramienta y menciona sus nombres de forma natural. "
+    "Para corregir código abierto usa editor_file, después write_file y una comprobación con PowerShell. Prioriza archivos sobre capturas y evita reescribir el código mediante teclado. "
     "Comprueba el resultado antes de afirmar que hiciste un cambio."
 )
 TEXT = {"type": "string"}
@@ -46,6 +47,7 @@ def function_tool(name, description, **properties):
 TOOLS = [
     {"type": "web_search"},
     {"type": "computer"},
+    function_tool("editor_file", "Obtiene la ruta y el texto actual de VS Code. Detecta cambios sin guardar. Úsala antes de corregir código abierto."),
     function_tool("read_file", "Lee un archivo de texto UTF-8, HTML o Word DOCX local. Devuelve hasta 24000 caracteres.", path=TEXT),
     function_tool("write_file", "Crea o reemplaza un archivo de texto UTF-8. El directorio debe existir.", path=TEXT, content=TEXT),
     function_tool("open_path", "Abre un archivo, directorio o ejecutable local con Windows y lo deja abierto.", path=TEXT),
@@ -55,16 +57,17 @@ TOOLS = [
 
 
 class AdvancedSession:
-    def __init__(self, provider, driver, cancel, status, activity=None):
+    def __init__(self, provider, driver, cancel, status, activity=None, settings=None):
         self.provider = provider
         self.driver = driver
         self.cancel = cancel
         self.status = status
         self.activity = activity if activity is not None else AdvancedActivity()
         self.sources = []
+        self.settings = settings
 
     def run(self, task, recent, context):
-        self.deadline = time.monotonic() + 240
+        self.deadline = time.monotonic() + (self.settings.luna_seconds if self.settings else 240)
         self.check_cancel()
         self.activity.record("session_started")
         try:
@@ -78,9 +81,9 @@ class AdvancedSession:
     def _run(self, task, recent, context):
         history = [{"role": "user", "content": f"{context}\nDiálogo previo: {recent}\nPetición actual: {task}"}]
         searched_sources = {}
-        for turn in range(12):
+        for turn in range(self.settings.luna_turns if self.settings else 12):
             self.check_cancel()
-            self.status(f"Luna está trabajando en modo avanzado. Paso {turn + 1} de 12.")
+            self.status(f"Luna está trabajando en modo avanzado. Paso {turn + 1} de {self.settings.luna_turns if self.settings else 12}.")
             reasoning = self.provider.reasoning_for(task, "advanced", recent, escalate=turn >= 4)
             response = self.provider.client.responses.create(
                 model=self.provider.model, instructions=INSTRUCTIONS, tools=TOOLS, input=history,
@@ -158,6 +161,11 @@ class AdvancedSession:
     def _function(self, name, arguments):
         try:
             args = json.loads(arguments)
+            if name == "editor_file":
+                from windows.editor_file import editor_snapshot
+                result = editor_snapshot(self.driver.target)
+                self.editor = result
+                return result
             if name == "read_file":
                 return self._read_file(self._path(args["path"]))
             if name == "write_file":
@@ -205,6 +213,16 @@ class AdvancedSession:
         return {"text": text[:24000], "truncated": len(text) > 24000}
 
     def _write_file(self, path, content):
+        editor = getattr(self, "editor", None)
+        if editor and str(path) == editor["path"]:
+            from windows.editor_file import editor_snapshot
+            current = editor_snapshot(self.driver.target)
+            if current["path"] != editor["path"] or current["text"] != editor["text"]:
+                raise ValueError("El contenido abierto cambió. Vuelve a consultar editor_file.")
+            if editor["unsaved"]:
+                raise ValueError("El editor tiene cambios sin guardar. Pide al usuario guardarlos antes de modificar el archivo.")
+            if path.read_text(encoding="utf-8-sig") != editor["disk_text"]:
+                raise ValueError("El archivo cambió desde la lectura. Vuelve a consultar editor_file.")
         before = self.activity.file_state(path, backup=True)
         self.activity.record("file_write_started", before=before)
         self.check_cancel()
@@ -227,7 +245,7 @@ class AdvancedSession:
         self.check_cancel()
         result = {}
         try:
-            result = run_powershell(command, cwd, self.check_cancel)
+            result = run_powershell(command, cwd, self.check_cancel, seconds=self.settings.shell_seconds if self.settings else 45)
             return result
         finally:
             self.activity.record("powershell_ended", exit_code=result.get("exit_code"), after=[self.activity.file_state(path) for path in paths])

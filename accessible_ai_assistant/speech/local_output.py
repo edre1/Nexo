@@ -70,7 +70,7 @@ class LocalSpeechOutput:
                             if piper is None:
                                 piper = processes.enter_context(audio_process(piper_worker, str(PIPER)))
                             connection, process = piper
-                            connection.send(text)
+                            connection.send(text or "Listo.")
                             audio = BytesIO(receive_audio(connection, process, 45))
                         else:
                             if self.voice is None:
@@ -78,7 +78,9 @@ class LocalSpeechOutput:
                                 self.voice = PiperVoice.load(str(PIPER), use_cuda=False)
                             audio = BytesIO()
                             with wave.open(audio, "wb") as wav:
-                                self.voice.synthesize_wav(text, wav)
+                                self.voice.synthesize_wav(text or "Listo.", wav)
+                        if not text:
+                            continue
                         if cancelled is None:
                             winsound.PlaySound(audio.getvalue(), winsound.SND_MEMORY)
                         elif not cancelled.is_set():
@@ -115,6 +117,10 @@ class LocalSpeechOutput:
             finally:
                 if done:
                     done.set()
+
+    def preload(self):
+        if self.engine == "piper" and PIPER.exists():
+            self.queue.put(("", None, None))
 
     def speak(self, text):
         if text and not self.closed:
