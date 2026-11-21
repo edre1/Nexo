@@ -40,7 +40,7 @@ Se retiró la antigua acción `move_cursor` del catálogo, de los esquemas y del
 
 En la versión 1.3.0, Luna dispone de una herramienta para consultar la ruta y el contenido del archivo activo en VS Code usando sus atajos predeterminados. Para corregir código, prioriza la edición del archivo con copia previa y comprueba cambios sin guardar antes de escribir. La consulta enfoca el primer grupo del editor. Guarda tus cambios y activa el archivo que quieres corregir antes de pedirlo.
 
-En Configuración, **Atajos y límites de Luna** permite cambiar el tiempo por tarea, las consultas por tarea, las acciones visuales y el tiempo de cada comando. También configura **Ctrl+Alt+R** para repetir la última respuesta y **Ctrl+Alt+T** para escribir desde otra ventana.
+En Configuración, **Atajos y límites de Luna** permite cambiar el tiempo por tarea, las consultas por tarea, las acciones visuales y el tiempo de cada comando. También configura **Ctrl+Alt+F9** para repetir la última respuesta y **Ctrl+Alt+T** para escribir desde otra ventana.
 
 El botón **Diagnóstico** prueba internet, las claves de los dos proveedores, el micrófono, Piper y la salida de voz. Las pruebas de proveedores realizan una petición breve. Cerrar la ventana mantiene Nexo en segundo plano. Para salir, abre el menú del icono de Nexo en el área de notificaciones y elige **Salir de Nexo**.
 

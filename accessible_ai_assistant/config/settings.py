@@ -30,7 +30,7 @@ class Settings:
     review_transcript: bool = False
     speak_review_hint: bool = True
     gemini_web_search: bool = False
-    hotkey_repeat: str = "Ctrl+Alt+R"
+    hotkey_repeat: str = "Ctrl+Alt+F9"
     hotkey_text: str = "Ctrl+Alt+T"
     luna_seconds: int = 240
     luna_turns: int = 12
@@ -48,9 +48,11 @@ def load_settings() -> Settings:
     selected = str(data.get("ai_provider", "openai"))
     if selected not in {"gemini", "openai"}:
         selected = "openai"
+    if data.get("hotkey_repeat") == "Ctrl+Alt+R":
+        data["hotkey_repeat"] = "Ctrl+Alt+F9"
     return Settings(
         ai_provider=selected,
-        hotkey_repeat=str(data.get("hotkey_repeat", "Ctrl+Alt+R")),
+        hotkey_repeat=str(data.get("hotkey_repeat", "Ctrl+Alt+F9")),
         hotkey_text=str(data.get("hotkey_text", "Ctrl+Alt+T")),
         luna_seconds=int(data.get("luna_seconds", 240)),
         luna_turns=int(data.get("luna_turns", 12)),

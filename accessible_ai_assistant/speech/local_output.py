@@ -27,6 +27,29 @@ def piper_worker(connection, model):
         connection.send(audio.getvalue())
 
 
+def play_interruptible(path, cancelled):
+    finished = threading.Event()
+    errors = []
+
+    def play():
+        try:
+            if not cancelled.is_set():
+                winsound.PlaySound(str(path), winsound.SND_FILENAME | winsound.SND_NODEFAULT)
+        except Exception as exc:
+            errors.append(exc)
+        finally:
+            finished.set()
+
+    playback = threading.Thread(target=play, daemon=True)
+    playback.start()
+    while not finished.wait(0.02):
+        if cancelled.is_set():
+            winsound.PlaySound(None, 0)
+    playback.join()
+    if errors:
+        raise errors[0]
+
+
 def verify_piper():
     with audio_process(piper_worker, str(PIPER)) as (connection, process):
         connection.send("Prueba de voz de Nexo.")
@@ -84,18 +107,10 @@ class LocalSpeechOutput:
                         if cancelled is None:
                             winsound.PlaySound(audio.getvalue(), winsound.SND_MEMORY)
                         elif not cancelled.is_set():
-                            audio.seek(0)
-                            with wave.open(audio, "rb") as wav:
-                                duration = wav.getnframes() / wav.getframerate()
                             with TemporaryDirectory(prefix="nexo-voice-") as folder:
                                 path = Path(folder) / "voice.wav"
                                 path.write_bytes(audio.getvalue())
-                                if not cancelled.is_set():
-                                    winsound.PlaySound(str(path), winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT)
-                                    try:
-                                        cancelled.wait(duration + 0.05)
-                                    finally:
-                                        winsound.PlaySound(None, 0)
+                                play_interruptible(path, cancelled)
                         continue
                     except Exception:
                         processes.close()

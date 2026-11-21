@@ -41,15 +41,15 @@ def _editor_snapshot(target):
         win32clipboard.EmptyClipboard()
     finally:
         win32clipboard.CloseClipboard()
-    send_keys("^k^+c")
+    send_keys("^kp")
     time.sleep(0.3)
     path = Path(clipboard_text().strip())
     if not path.is_absolute() or not path.is_file():
-        raise ValueError("No pude obtener la ruta del archivo. Guarda el archivo en VS Code.")
+        raise ValueError("No pude copiar la ruta del archivo activo. Comprueba el foco y el atajo Ctrl más K, seguido de P en VS Code. Esto no confirma que el archivo esté sin guardar.")
     if path.stat().st_size > 400000:
         raise ValueError("El archivo es demasiado grande para esta lectura.")
     disk = path.read_text(encoding="utf-8-sig")
-    send_keys("^1^a^c")
+    send_keys("^a^c")
     time.sleep(0.2)
     buffer = clipboard_text()
     send_keys("^u")

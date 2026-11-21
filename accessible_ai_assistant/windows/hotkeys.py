@@ -41,7 +41,7 @@ def parse_hotkey(value: str) -> tuple[int, int]:
 
 
 class GlobalHotkeys:
-    def __init__(self, listen: str, cancel: str, callback, *, provider: str = DEFAULT_PROVIDER_SHORTCUT, repeat="Ctrl+Alt+R", text="Ctrl+Alt+T"):
+    def __init__(self, listen: str, cancel: str, callback, *, provider: str = DEFAULT_PROVIDER_SHORTCUT, repeat="Ctrl+Alt+F9", text="Ctrl+Alt+T"):
         self.listen = parse_hotkey(listen)
         self.cancel = parse_hotkey(cancel)
         self.provider = parse_hotkey(provider)

@@ -531,7 +531,7 @@ class MainWindow:
                 return
             if candidate is not None:
                 self.hotkeys = candidate
-                self.settings = replace(self.settings, hotkey_listen=value, hotkey_provider=provider_shortcut, repeat=previous.hotkey_repeat, text=previous.hotkey_text)
+                self.settings = replace(self.settings, hotkey_listen=value, hotkey_provider=provider_shortcut)
                 self.provider_label.configure(text=f"Modelo para la siguiente petición · {provider_shortcut} para cambiar")
                 self.status.set(f"Atajos guardados. Hablar: {value}. Cambiar modelo: {provider_shortcut}.")
             self._apply_preferences(selected_recognition, selected_voice, selected_confirmation)
@@ -703,6 +703,8 @@ class MainWindow:
         if not self._can_send():
             return
         target = self._target() if target is None else target
+        self.root.withdraw()
+        self.root.update_idletasks()
         self.busy = True
         self.cancel_event.clear()
         self.status.set("Preparando micrófono.")
@@ -717,6 +719,8 @@ class MainWindow:
             self._announce_error("Escribe una petición primero.")
             return
         target = self._target()
+        self.root.withdraw()
+        self.root.update_idletasks()
         self.busy = True
         self.cancel_event.clear()
         self._sync_controls()
